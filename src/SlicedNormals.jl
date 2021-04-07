@@ -1,8 +1,12 @@
-using LinearAlgebra, Distributions, PDMats
+module SlicedNormals
+
+using LinearAlgebra, Distributions, PDMats, DynamicPolynomials
 
 import Base: in, ∈
 
-module SlicedNormals
+export Z, pdf
+
+include("support.jl")
 
 struct SlicedNormal
     d::Integer
@@ -17,6 +21,14 @@ function pdf(sn::SlicedNormal, δ::AbstractVector)
     else
         return 0
     end
+end
+
+function Z(δ::AbstractVector, d::Integer)
+    x = @polyvar x[1:length(δ)]
+    z = monomials(x..., 1:d)
+
+    # double reverse to achieve graded lexographic order
+    map(p -> p(reverse(δ)), z) |> reverse
 end
 
 end # module

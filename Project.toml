@@ -2,3 +2,9 @@ name = "SlicedNormals"
 uuid = "78bc189a-7b6d-4df1-8a23-377b7c6fd0cb"
 authors = ["Jasper Behrensdorf <behrensdorf@irz.uni-hannover.de>"]
 version = "0.1.0"
+
+[deps]
+Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
+DynamicPolynomials = "7c1d4256-1411-5781-91ec-d7bc3513ac07"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+PDMats = "90014a1f-27ba-587c-ab20-58faa44d9150"

@@ -4,7 +4,7 @@ using LinearAlgebra, Distributions, PDMats, DynamicPolynomials, IntervalArithmet
 
 import Base: in, ∈
 
-export Z, pdf
+export SlicedNormal, Z, pdf
 
 struct SlicedNormal
     d::Integer
@@ -16,6 +16,8 @@ end
 function pdf(sn::SlicedNormal, δ::AbstractVector)
     if δ ∈ sn.Δ
         mvn = MvNormal(sn.μ, inv(sn.P))
+        z = Z(δ, sn.d)
+        return Distributions.pdf(mvn, z) # TODO: Normalization
     else
         return 0
     end

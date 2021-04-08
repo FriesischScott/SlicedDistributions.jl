@@ -1,18 +1,16 @@
 module SlicedNormals
 
-using LinearAlgebra, Distributions, PDMats, DynamicPolynomials
+using LinearAlgebra, Distributions, PDMats, DynamicPolynomials, IntervalArithmetic
 
 import Base: in, ∈
 
 export Z, pdf
 
-include("support.jl")
-
 struct SlicedNormal
     d::Integer
     μ::AbstractVector
     P::AbstractPDMat
-    Δ::SupportSet # TODO: Use IntervalArithmetics.jl?
+    Δ::IntervalBox
 end
 
 function pdf(sn::SlicedNormal, δ::AbstractVector)

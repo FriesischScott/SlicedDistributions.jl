@@ -1,4 +1,8 @@
-using SlicedNormals, IntervalArithmetic, PDMats, Distributions, StatsBase, Plots, CovarianceEstimation
+using IntervalArithmetic
+using PDMats
+using Plots
+using SlicedNormals
+using StatsBase
 
 n = 500
 
@@ -7,11 +11,7 @@ n = 500
 δ = [δ1 δ2]
 
 d = 3
-fz  = mapreduce(r -> Z(r, d) |> transpose, vcat, eachrow(δ))
-
-μ = mean(fz, dims=1) |> vec
-P = cov(LinearShrinkage(ConstantCorrelation()), fz) |> inv |> PDMat
-
+μ, P = SlicedNormals.fit(δ, d)
 Δ = interval(0, 1) × interval(0, 1)
 
 sn = SlicedNormal(d, μ, P, Δ)

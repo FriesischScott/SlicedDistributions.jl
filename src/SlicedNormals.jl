@@ -1,10 +1,13 @@
 module SlicedNormals
 
-using LinearAlgebra, Distributions, PDMats, DynamicPolynomials, IntervalArithmetic
+using CovarianceEstimation
+using Distributions
+using DynamicPolynomials
+using IntervalArithmetic
+using LinearAlgebra
+using PDMats
 
-import Base: in, ∈
-
-export SlicedNormal, Z, pdf
+export SlicedNormal, Z, pdf, fit
 
 struct SlicedNormal
     d::Integer
@@ -29,6 +32,15 @@ function Z(δ::AbstractVector, d::Integer)
 
     # double reverse to achieve graded lexographic order
     map(p -> p(reverse(δ)), z) |> reverse
+end
+
+function fit(x::AbstractMatrix, d::Integer)
+    z  = mapreduce(r -> Z(r, d) |> transpose, vcat, eachrow(x))
+
+    μ = mean(z, dims=1) |> vec
+    P = cov(LinearShrinkage(ConstantCorrelation()), z) |> inv |> PDMat
+
+    return μ, P
 end
 
 end # module

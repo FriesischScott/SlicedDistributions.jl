@@ -21,7 +21,7 @@ z = zeros(resolution, resolution)
 
 z = [SlicedNormals.pdf(sn, [x[i], y[j]]) for i = 1:resolution, j = 1:resolution]
 
-samples, _ = rand(sn, 1000)
+samples = rand(sn, 1000)
 
 p = plot()
 contourf!(p, x, y, z)

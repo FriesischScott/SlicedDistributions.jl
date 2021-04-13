@@ -3,8 +3,10 @@ module SlicedNormals
 using CovarianceEstimation
 using Distributions
 using DynamicPolynomials
+using HCubature
 using IntervalArithmetic
 using LinearAlgebra
+using Memoize
 using PDMats
 using TransitionalMCMC
 
@@ -23,7 +25,8 @@ function pdf(sn::SlicedNormal, δ::AbstractVector)
     if δ ∈ sn.Δ
         mvn = MvNormal(sn.μ, inv(sn.P))
         z = Z(δ, sn.d)
-        return Distributions.pdf(mvn, z) # TODO: Normalization
+
+        return (γ(sn) / c(sn)) * Distributions.pdf(mvn, z)
     else
         return 0
     end
@@ -37,6 +40,28 @@ function Z(δ::AbstractVector, d::Integer)
     map(p -> p(reverse(δ)), z) |> reverse
 end
 
+@memoize function c(sn::SlicedNormal)
+    mvn = MvNormal(sn.μ, inv(sn.P))
+
+    lb, ub = support(sn)
+
+    normalization, _ = hcubature(x -> γ(sn) * Distributions.pdf(mvn, Z(x, sn.d)), lb, ub)
+
+    return normalization
+end
+
+@memoize function γ(sn::SlicedNormal)
+    (2 * π)^(length(sn.μ) / 2) * sqrt(det(inv(sn.P)))
+end
+
+
+@memoize function support(sn::SlicedNormal)
+    lb = [map(x -> x.lo, sn.Δ.v.data)...]
+    ub = [map(x -> x.hi, sn.Δ.v.data)...]
+
+    return lb, ub
+end
+
 function fit(x::AbstractMatrix, d::Integer)
     z  = mapreduce(r -> Z(r, d) |> transpose, vcat, eachrow(x))
 
@@ -47,8 +72,7 @@ function fit(x::AbstractMatrix, d::Integer)
 end
 
 function rand(sn::SlicedNormal, n::Integer)
-    lb = [map(x -> x.lo, sn.Δ.v.data)...]
-    ub = [map(x -> x.hi, sn.Δ.v.data)...]
+    lb, ub = support(sn)
 
     prior = Uniform.(lb, ub)
 
@@ -56,7 +80,9 @@ function rand(sn::SlicedNormal, n::Integer)
     sampler(n) = mapreduce(u -> rand(u, n), hcat, prior)
     loglikelihood(x) = SlicedNormals.pdf(sn, x) |> log
 
-    tmcmc(loglikelihood, logprior, sampler, n)
+    samples, _ = tmcmc(loglikelihood, logprior, sampler, n)
+
+    return samples
 end
 
 end # module

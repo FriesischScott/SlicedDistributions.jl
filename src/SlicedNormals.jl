@@ -6,8 +6,11 @@ using DynamicPolynomials
 using IntervalArithmetic
 using LinearAlgebra
 using PDMats
+using TransitionalMCMC
 
-export SlicedNormal, Z, pdf, fit
+import Base:rand
+
+export SlicedNormal, Z, rand, pdf, fit
 
 struct SlicedNormal
     d::Integer
@@ -41,6 +44,19 @@ function fit(x::AbstractMatrix, d::Integer)
     P = cov(LinearShrinkage(ConstantCorrelation()), z) |> inv |> PDMat
 
     return μ, P
+end
+
+function rand(sn::SlicedNormal, n::Integer)
+    lb = [map(x -> x.lo, sn.Δ.v.data)...]
+    ub = [map(x -> x.hi, sn.Δ.v.data)...]
+
+    prior = Uniform.(lb, ub)
+
+    logprior(x) = logpdf.(prior, x) |> sum
+    sampler(n) = mapreduce(u -> rand(u, n), hcat, prior)
+    loglikelihood(x) = SlicedNormals.pdf(sn, x) |> log
+
+    tmcmc(loglikelihood, logprior, sampler, n)
 end
 
 end # module

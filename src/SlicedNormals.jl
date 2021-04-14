@@ -32,6 +32,17 @@ function pdf(sn::SlicedNormal, δ::AbstractVector)
     end
 end
 
+function pdf(sn::SlicedNormal, δ::AbstractMatrix)
+    n, m = size(δ)
+    if n == 1 || m == 1
+        return pdf(sn, vec(δ))
+    end
+    if n < m
+        return [pdf(sn, c) for c in eachcol(δ)]
+    end
+    return return [pdf(sn, c) for c in eachrow(δ)]
+end
+
 function Z(δ::AbstractVector, d::Integer)
     x = @polyvar x[1:length(δ)]
     z = monomials(x..., 1:d)
@@ -78,7 +89,7 @@ function rand(sn::SlicedNormal, n::Integer)
 
     logprior(x) = logpdf.(prior, x) |> sum
     sampler(n) = mapreduce(u -> rand(u, n), hcat, prior)
-    loglikelihood(x) = SlicedNormals.pdf(sn, x) |> log
+    loglikelihood(x) = log.(SlicedNormals.pdf(sn, x))
 
     samples, _ = tmcmc(loglikelihood, logprior, sampler, n)
 

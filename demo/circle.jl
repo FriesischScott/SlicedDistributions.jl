@@ -48,6 +48,6 @@ x = range(-2.5, 2.5, length=resolution)
 y = range(-2.5, 2.5, length=resolution)
 z = zeros(resolution, resolution)
 
-z = [SlicedNormals.pdf(sn, [x[i], y[j]]) for i = 1:resolution, j = 1:resolution]
+z = [pdf(sn, [x[i], y[j]]) for i = 1:resolution, j = 1:resolution]
 
 contourf(x, y, z, aspect_ratio=:equal, lims=[-2.5, 2.5], c=:tempo)

@@ -10,8 +10,6 @@ using Memoize
 using PDMats
 using TransitionalMCMC
 
-import Base:rand
-
 export SlicedNormal, Z, rand, pdf, fit
 
 struct SlicedNormal
@@ -21,7 +19,7 @@ struct SlicedNormal
     Δ::IntervalBox
 end
 
-function pdf(sn::SlicedNormal, δ::AbstractVector)
+function Distributions.pdf(sn::SlicedNormal, δ::AbstractVector)
     if δ ∈ sn.Δ
         mvn = MvNormal(sn.μ, inv(sn.P))
         z = Z(δ, sn.d)
@@ -32,7 +30,7 @@ function pdf(sn::SlicedNormal, δ::AbstractVector)
     end
 end
 
-function pdf(sn::SlicedNormal, δ::AbstractMatrix)
+function Distributions.pdf(sn::SlicedNormal, δ::AbstractMatrix)
     n, m = size(δ)
     if n == 1 || m == 1
         return pdf(sn, vec(δ))
@@ -73,7 +71,7 @@ end
     return lb, ub
 end
 
-function fit(x::AbstractMatrix, d::Integer)
+function Distributions.fit(x::AbstractMatrix, d::Integer)
     z  = mapreduce(r -> Z(r, d) |> transpose, vcat, eachrow(x))
 
     μ = mean(z, dims=1) |> vec
@@ -82,14 +80,14 @@ function fit(x::AbstractMatrix, d::Integer)
     return μ, P
 end
 
-function rand(sn::SlicedNormal, n::Integer)
+function Base.rand(sn::SlicedNormal, n::Integer)
     lb, ub = support(sn)
 
     prior = Uniform.(lb, ub)
 
     logprior(x) = logpdf.(prior, x) |> sum
     sampler(n) = mapreduce(u -> rand(u, n), hcat, prior)
-    loglikelihood(x) = log.(SlicedNormals.pdf(sn, x))
+    loglikelihood(x) = log.(pdf(sn, x))
 
     samples, _ = tmcmc(loglikelihood, logprior, sampler, n)
 

@@ -56,11 +56,11 @@ end
     return normalization
 end
 
-@memoize function γ(μ, P)
+function γ(μ, P)
     (2 * π)^(length(μ) / 2) * sqrt(det(inv(P)))
 end
 
-@memoize function bounds(Δ::IntervalBox)
+function bounds(Δ::IntervalBox)
     lb = [map(x -> x.lo, Δ.v.data)...]
     ub = [map(x -> x.hi, Δ.v.data)...]
 
@@ -76,33 +76,35 @@ function fit_baseline(x::AbstractMatrix, d::Integer)
     return μ, P
 end
 
-function fit_scaling(x::AbstractMatrix, Δ::IntervalBox, d::Integer)
+function fit_scaling(x::AbstractMatrix, d::Integer)
     μ, P = fit_baseline(x, d)
+
+    lb = minimum(x, dims=1) |> vec
+    ub = maximum(x, dims=1) |> vec
+
+    Δ = IntervalBox(interval.(lb, ub)...)
+
+    D = [_ϕ(δ, μ, P, d) for δ in eachrow(x)] |> sum
 
     m = size(x, 1)
 
-    function ϕ(δ, μ, P, d)
-        z = Z(δ, d)
-        return ((z - μ)' * P * (z - μ)) / 2
+    opt = Opt(:LN_NELDERMEAD, 1)
+    opt.lower_bounds = [0.0]
+    opt.xtol_rel = 1e-5
+    opt.min_objective = (s, grad) -> begin
+        try
+            cΔ = hcubature(δ -> exp(-_ϕ(δ, μ, s[1] * P.mat, d)), lb, ub)[1]
+            lh = m * log(1 / cΔ) - s[1] * D
+            return -1 * lh
+        catch e
+            @show e
+            rethrow(e)
+        end
     end
 
-    D = [ϕ(δ, μ, P, d) for δ in eachrow(x)] |> sum
-
-    f = (s, grad) -> m * log(1 / c(μ, s .* P, Δ, d)) - s .* D
-
-    @show f(1.0, nothing)
-
-    opt = Opt(:LN_COBYLA, 1)
-    opt.lower_bounds = [0.0]
-
-    opt.min_objective = f
-
-    (minf, s, ret) = optimize(opt, [1.0])
-
-    #= @show s
-    @show minf
-    @show ret =#
-    return μ, s * P
+    (lh, factor, _) = optimize(opt, [1.0])
+    @show factor
+    return SlicedNormal(d, μ, factor[1] * P, Δ), -1 * lh
 end
 
 function rand(sn::SlicedNormal, n::Integer)
@@ -117,6 +119,11 @@ function rand(sn::SlicedNormal, n::Integer)
     samples, _ = tmcmc(loglikelihood, logprior, sampler, n)
 
     return samples
+end
+
+function _ϕ(δ, μ, P, d)
+    z = Z(δ, d)
+    return ((z - μ)' * P * (z - μ)) / 2
 end
 
 end # module

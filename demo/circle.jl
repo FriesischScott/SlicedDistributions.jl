@@ -31,7 +31,7 @@ idx = δ1 .< 0
 
 # Fit Sliced Normal Distribution
 d = 5
-μ, P = SlicedNormals.fit(δ, d)
+μ, P = fit_baseline(δ, d)
 Δ = IntervalBox(-2.5..2.5, -2.5..2.5)
 
 sn = SlicedNormal(d, μ, P, Δ)

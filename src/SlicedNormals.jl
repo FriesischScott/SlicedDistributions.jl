@@ -5,7 +5,6 @@ using Distributions
 using DynamicPolynomials
 using HCubature
 using IntervalArithmetic
-using JuMP
 using LinearAlgebra
 using Memoize
 using NLopt
@@ -92,18 +91,12 @@ function fit_scaling(x::AbstractMatrix, d::Integer)
     opt.lower_bounds = [0.0]
     opt.xtol_rel = 1e-5
     opt.min_objective = (s, grad) -> begin
-        try
-            cΔ = hcubature(δ -> exp(-_ϕ(δ, μ, s[1] * P.mat, d)), lb, ub)[1]
-            lh = m * log(1 / cΔ) - s[1] * D
-            return -1 * lh
-        catch e
-            @show e
-            rethrow(e)
-        end
+        cΔ = hcubature(δ -> exp(-_ϕ(δ, μ, s[1] * P.mat, d)), lb, ub)[1]
+        lh = m * log(1 / cΔ) - s[1] * D
+        return -1 * lh
     end
 
     (lh, factor, _) = optimize(opt, [1.0])
-    @show factor
     return SlicedNormal(d, μ, factor[1] * P, Δ), -1 * lh
 end
 
@@ -124,6 +117,17 @@ end
 function _ϕ(δ, μ, P, d)
     z = Z(δ, d)
     return ((z - μ)' * P * (z - μ)) / 2
+end
+
+function _sample_ellipsoid(S::PDMat, z::Vector{<:Real}, m::Integer, P::Real=0.99)
+    n = size(S, 1)
+    γ = quantile(Chisq(n), P)
+    X = randn(n, m)
+    X = X ./ kron(ones(n, 1), sqrt.(sum(X.^2, dims=1)))
+    R = ones(n, 1) * rand(1, m).^(1 / n)
+    sphere = R .* X
+    ellipsoid = cholesky(S).U * sphere
+    return ellipsoid * sqrt(γ) + z .* ones(1, m)
 end
 
 end # module

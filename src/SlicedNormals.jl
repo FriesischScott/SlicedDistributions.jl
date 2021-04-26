@@ -45,11 +45,9 @@ function Z(δ::AbstractVector, d::Integer)
 end
 
 @memoize function c(μ, P, Δ, d)
-    mvn = MvNormal(μ, inv(P))
-
     lb, ub = bounds(Δ)
 
-    normalization, _ = hcubature(x -> Distributions.pdf(mvn, Z(x, d)), lb, ub)
+    normalization, _ = hcubature(δ -> exp(-_ϕ(Z(δ, d), μ, P, d)), lb, ub)
 
     return normalization
 end

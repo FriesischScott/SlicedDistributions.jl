@@ -1,5 +1,7 @@
+using CovarianceEstimation
 using Distributions
 using IntervalArithmetic
+using PDMats
 using Plots
 using SlicedNormals
 
@@ -33,20 +35,29 @@ idx = δ1 .< 0
 d = 5
 b = 1000
 
-sn, lh = fit_scaling(δ, d)
+μ = mean(δ, dims=1) |> vec
+P = cov(LinearShrinkage(ConstantCorrelation()), δ) |> inv |> PDMat
+
+U = SlicedNormals._sample_ellipsoid(inv(P), μ, 10000)
+
+μ, P = fit_baseline(δ, d)
+Δ = IntervalBox(-4..4, -4..4)
+
+sn = SlicedNormal(d, μ, P, Δ)
 
 samples = rand(sn, 1000)
 
 # Plot generated data and new samples
-p = scatter(δ[:, 1], δ[:, 2], aspect_ratio=:equal, lims=[-4, 4], xlab="δ1", ylab="δ2", legend=:none)
-scatter!(p, samples[:, 1], samples[:, 2])
+p = scatter(δ[:, 1], δ[:, 2], aspect_ratio=:equal, lims=[-4, 4], xlab="δ1", ylab="δ2", label="data")
+scatter!(p, samples[:, 1], samples[:, 2], label="samples")
 
-# Plot sliced normal density
-resolution = 100
-x = range(-4, 4, length=resolution)
-y = range(-4, 4, length=resolution)
-z = zeros(resolution, resolution)
+savefig(p, "baseline.png")
 
-z = [SlicedNormals.pdf(sn, [x[i], y[j]]) for i = 1:resolution, j = 1:resolution]
+sn, _ = fit_scaling(δ, d)
 
-contourf(x, y, z, aspect_ratio=:equal, lims=[-4, 4], c=:tempo)
+samples = rand(sn, 1000)
+
+p = scatter(δ[:, 1], δ[:, 2], aspect_ratio=:equal, lims=[-4, 4], xlab="δ1", ylab="δ2", label="data")
+scatter!(p, samples[:, 1], samples[:, 2], label="samples")
+
+savefig(p, "scaling.png")

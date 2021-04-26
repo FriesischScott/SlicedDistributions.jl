@@ -24,13 +24,12 @@ end
 
 function pdf(sn::SlicedNormal, δ::AbstractVector, normalize::Bool=true)
     if δ ∈ sn.Δ
-        mvn = MvNormal(sn.μ, inv(sn.P))
-        z = Z(δ, sn.d)
+        f = exp(-_ϕ(δ, sn.μ, sn.P, sn.d))
 
         if normalize
-            return (γ(sn.μ, sn.P) / c(sn.μ, sn.P, sn.Δ, sn.d)) * Distributions.pdf(mvn, z)
+            return f / c(sn.μ, sn.P, sn.Δ, sn.d)
         else
-            return Distributions.pdf(mvn, z)
+            return f
         end
     else
         return 0
@@ -50,13 +49,9 @@ end
 
     lb, ub = bounds(Δ)
 
-    normalization, _ = hcubature(x -> γ(μ, P) * Distributions.pdf(mvn, Z(x, d)), lb, ub)
+    normalization, _ = hcubature(x -> Distributions.pdf(mvn, Z(x, d)), lb, ub)
 
     return normalization
-end
-
-function γ(μ, P)
-    (2 * π)^(length(μ) / 2) * sqrt(det(inv(P)))
 end
 
 function bounds(Δ::IntervalBox)

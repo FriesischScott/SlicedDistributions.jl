@@ -7,6 +7,6 @@ jobs:
   CompatHelper:
     runs-on: ubuntu-latest
     steps:
-      - uses: JuliaRegistries/compathelper-action
+      - uses: JuliaRegistries/compathelper-action@v1
         with:
           ssh: ${{ secrets.COMPATHELPER_KEY }}

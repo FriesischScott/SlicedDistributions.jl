@@ -18,3 +18,7 @@ TransitionalMCMC = "5bc637a6-1a46-43ed-8ea7-ee39cc1921ce"
 
 [compat]
 StatsBase = "0.33"
+HCubature = "1"
+CovarianceEstimation = "0.2"
+IntervalArithmetic = "0.19"
+PDMats = "0.11"

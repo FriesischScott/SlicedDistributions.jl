@@ -17,6 +17,7 @@ StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 TransitionalMCMC = "5bc637a6-1a46-43ed-8ea7-ee39cc1921ce"
 
 [compat]
+Memoize = "0.4"
 Distributions = "0.25"
 DynamicPolynomials = "0.3"
 TransitionalMCMC = "0.4"

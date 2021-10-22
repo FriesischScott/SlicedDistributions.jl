@@ -112,15 +112,4 @@ function _ϕ(δ, μ, P, d)
     return ((z - μ)' * P * (z - μ)) / 2
 end
 
-function _sample_ellipsoid(S::PDMat, z::Vector{<:Real}, m::Integer, P::Real=0.99)
-    n = size(S, 1)
-    γ = quantile(Chisq(n), P)
-    X = randn(n, m)
-    X = X ./ kron(ones(n, 1), sqrt.(sum(X.^2, dims=1)))
-    R = ones(n, 1) * rand(1, m).^(1 / n)
-    sphere = R .* X
-    ellipsoid = cholesky(S).U * sphere
-    return ellipsoid * sqrt(γ) + z .* ones(1, m)
-end
-
 end # module

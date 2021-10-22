@@ -33,11 +33,11 @@ idx = δ1 .< 0
 d = 5
 b = 1000
 
-μ, P = fit_baseline(δ, d)
-Δ = IntervalBox(-4..4, -4..4)
-
 # Use baseline fit
-sn = SlicedNormal(d, μ, P, Δ)
+sn, lh = fit_baseline(δ, d)
+
+println("Baseline likelihood: $lh")
+
 samples = rand(sn, 1000)
 
 p = scatter(
@@ -48,7 +48,10 @@ scatter!(p, samples[:, 1], samples[:, 2]; label="samples")
 display(p)
 
 # Use baseline fit and then scale P
-sn, _ = fit_scaling(δ, d)
+sn, lh = fit_scaling(δ, d)
+
+println("Scaling likelihood: $lh")
+
 samples = rand(sn, 1000)
 
 p = scatter(

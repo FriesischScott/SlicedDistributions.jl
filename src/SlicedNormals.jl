@@ -11,7 +11,7 @@ using NLopt
 using PDMats
 using TransitionalMCMC
 
-import Base:rand
+import Base: rand
 
 export SlicedNormal, Z, rand, pdf, fit_baseline, fit_scaling
 
@@ -41,7 +41,7 @@ function Z(δ::AbstractVector, d::Integer)
     z = monomials(x..., 1:d)
 
     # double reverse to achieve graded lexographic order
-    map(p -> p(reverse(δ)), z) |> reverse
+    return reverse(map(p -> p(reverse(δ)), z))
 end
 
 @memoize function c(μ, P, Δ, d)
@@ -59,35 +59,54 @@ function bounds(Δ::IntervalBox)
     return lb, ub
 end
 
-function fit_baseline(x::AbstractMatrix, d::Integer)
-    z  = mapreduce(r -> Z(r, d) |> transpose, vcat, eachrow(x))
+function mean_and_covariance(x::AbstractMatrix, d::Integer)
+    z = mapreduce(r -> transpose(Z(r, d)), vcat, eachrow(x))
 
-    μ = mean(z, dims=1) |> vec
-    P = cov(LinearShrinkage(ConstantCorrelation()), z) |> inv |> PDMat
+    μ = vec(mean(z; dims=1))
+    P = PDMat(inv(cov(LinearShrinkage(ConstantCorrelation()), z)))
 
     return μ, P
 end
 
-function fit_scaling(x::AbstractMatrix, d::Integer)
-    μ, P = fit_baseline(x, d)
+function fit_baseline(x::AbstractMatrix, d::Integer)
+    μ, P = mean_and_covariance(x, d)
 
-    lb = minimum(x, dims=1) |> vec
-    ub = maximum(x, dims=1) |> vec
+    lb = vec(minimum(x; dims=1))
+    ub = vec(maximum(x; dims=1))
 
     Δ = IntervalBox(interval.(lb, ub)...)
 
-    D = [_ϕ(δ, μ, P, d) for δ in eachrow(x)] |> sum
+    D = sum([_ϕ(δ, μ, P, d) for δ in eachrow(x)])
+
+    m = size(x, 1)
+
+    cΔ = hcubature(δ -> exp(-_ϕ(δ, μ, P.mat, d)), lb, ub)[1]
+    lh = m * log(1 / cΔ) - D
+
+    return SlicedNormal(d, μ, P, Δ), lh
+end
+
+function fit_scaling(x::AbstractMatrix, d::Integer)
+    μ, P = mean_and_covariance(x, d)
+
+    lb = vec(minimum(x; dims=1))
+    ub = vec(maximum(x; dims=1))
+
+    Δ = IntervalBox(interval.(lb, ub)...)
+
+    D = sum([_ϕ(δ, μ, P, d) for δ in eachrow(x)])
 
     m = size(x, 1)
 
     opt = Opt(:LN_NELDERMEAD, 1)
     opt.lower_bounds = [0.0]
     opt.xtol_rel = 1e-5
-    opt.min_objective = (s, grad) -> begin
-        cΔ = hcubature(δ -> exp(-_ϕ(δ, μ, s[1] * P.mat, d)), lb, ub)[1]
-        lh = m * log(1 / cΔ) - s[1] * D
-        return -1 * lh
-    end
+    opt.min_objective =
+        (s, grad) -> begin
+            cΔ = hcubature(δ -> exp(-_ϕ(δ, μ, s[1] * P.mat, d)), lb, ub)[1]
+            lh = m * log(1 / cΔ) - s[1] * D
+            return -1 * lh
+        end
 
     (lh, factor, _) = optimize(opt, [1.0])
     return SlicedNormal(d, μ, factor[1] * P, Δ), -1 * lh
@@ -98,9 +117,9 @@ function rand(sn::SlicedNormal, n::Integer)
 
     prior = Uniform.(lb, ub)
 
-    logprior(x) = logpdf.(prior, x) |> sum
+    logprior(x) = sum(logpdf.(prior, x))
     sampler(n) = mapreduce(u -> rand(u, n), hcat, prior)
-    loglikelihood(x) = SlicedNormals.pdf(sn, x, false) |> log
+    loglikelihood(x) = log(SlicedNormals.pdf(sn, x, false))
 
     samples, _ = tmcmc(loglikelihood, logprior, sampler, n)
 

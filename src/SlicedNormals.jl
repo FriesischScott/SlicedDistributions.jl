@@ -36,6 +36,17 @@ function pdf(sn::SlicedNormal, δ::AbstractVector, normalize::Bool=true)
     end
 end
 
+function Distributions.pdf(sn::SlicedNormal, δ::AbstractMatrix)
+    n, m = size(δ)
+    if n == 1 || m == 1
+        return pdf(sn, vec(δ))
+    end
+    if n < m
+        return [pdf(sn, c) for c in eachcol(δ)]
+    end
+    return return [pdf(sn, c) for c in eachrow(δ)]
+end
+
 function Z(δ::AbstractVector, d::Integer)
     x = @polyvar x[1:length(δ)]
     z = monomials(x..., 1:d)

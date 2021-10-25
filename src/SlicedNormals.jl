@@ -80,21 +80,13 @@ function mean_and_covariance(x::AbstractMatrix, d::Integer)
 end
 
 function fit_baseline(x::AbstractMatrix, d::Integer)
-    μ, P = mean_and_covariance(x, d)
 
     lb = vec(minimum(x; dims=1))
     ub = vec(maximum(x; dims=1))
 
     Δ = IntervalBox(interval.(lb, ub)...)
 
-    D = sum([_ϕ(δ, μ, P, d) for δ in eachrow(x)])
-
-    m = size(x, 1)
-
-    cΔ = hcubature(δ -> exp(-_ϕ(δ, μ, P.mat, d)), lb, ub)[1]
-    lh = m * log(1 / cΔ) - D
-
-    return SlicedNormal(d, μ, P, Δ), lh
+    return fit_baseline(x, d, Δ)
 end
 
 function fit_baseline(x::AbstractMatrix, d::Integer, Δ :: IntervalBox)
@@ -114,29 +106,14 @@ function fit_baseline(x::AbstractMatrix, d::Integer, Δ :: IntervalBox)
 end
 
 function fit_scaling(x::AbstractMatrix, d::Integer)
-    μ, P = mean_and_covariance(x, d)
+
 
     lb = vec(minimum(x; dims=1))
     ub = vec(maximum(x; dims=1))
 
     Δ = IntervalBox(interval.(lb, ub)...)
 
-    D = sum([_ϕ(δ, μ, P, d) for δ in eachrow(x)])
-
-    m = size(x, 1)
-
-    opt = Opt(:LN_NELDERMEAD, 1)
-    opt.lower_bounds = [0.0]
-    opt.xtol_rel = 1e-5
-    opt.min_objective =
-        (s, grad) -> begin
-            cΔ = hcubature(δ -> exp(-_ϕ(δ, μ, s[1] * P.mat, d)), lb, ub)[1]
-            lh = m * log(1 / cΔ) - s[1] * D
-            return -1 * lh
-        end
-
-    (lh, factor, _) = optimize(opt, [1.0])
-    return SlicedNormal(d, μ, factor[1] * P, Δ), -1 * lh
+    return fit_scaling(x, d, Δ)
 end
 
 function fit_scaling(x::AbstractMatrix, d::Integer, Δ :: IntervalBox)

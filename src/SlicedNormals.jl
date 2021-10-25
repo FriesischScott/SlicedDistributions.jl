@@ -80,14 +80,22 @@ function mean_and_covariance(x::AbstractMatrix, d::Integer)
 end
 
 function fit_baseline(x::AbstractMatrix, d::Integer)
-    μ, P = mean_and_covariance(x, d)
 
     lb = vec(minimum(x; dims=1))
     ub = vec(maximum(x; dims=1))
 
     Δ = IntervalBox(interval.(lb, ub)...)
 
+    return fit_baseline(x, d, Δ)
+end
+
+function fit_baseline(x::AbstractMatrix, d::Integer, Δ::IntervalBox)
+
+    μ, P = mean_and_covariance(x, d)
     D = sum([_ϕ(δ, μ, P, d) for δ in eachrow(x)])
+
+    lb = getfield.(Δ, :lo)
+    ub = getfield.(Δ, :hi)
 
     m = size(x, 1)
 
@@ -98,12 +106,21 @@ function fit_baseline(x::AbstractMatrix, d::Integer)
 end
 
 function fit_scaling(x::AbstractMatrix, d::Integer)
-    μ, P = mean_and_covariance(x, d)
 
     lb = vec(minimum(x; dims=1))
     ub = vec(maximum(x; dims=1))
 
     Δ = IntervalBox(interval.(lb, ub)...)
+
+    return fit_scaling(x, d, Δ)
+end
+
+function fit_scaling(x::AbstractMatrix, d::Integer, Δ::IntervalBox)
+
+    μ, P = mean_and_covariance(x, d)
+
+    lb = getfield.(Δ, :lo)
+    ub = getfield.(Δ, :hi)
 
     D = sum([_ϕ(δ, μ, P, d) for δ in eachrow(x)])
 

@@ -7,10 +7,13 @@ using HCubature
 using IntervalArithmetic
 using LinearAlgebra
 using Memoize
+using NLopt
 using PDMats
 using TransitionalMCMC
 
-export SlicedNormal, Z, rand, pdf, fit
+import Base: rand
+
+export SlicedNormal, Z, rand, pdf, fit_baseline, fit_scaling
 
 struct SlicedNormal
     d::Integer
@@ -19,12 +22,15 @@ struct SlicedNormal
     Δ::IntervalBox
 end
 
-function Distributions.pdf(sn::SlicedNormal, δ::AbstractVector)
+function pdf(sn::SlicedNormal, δ::AbstractVector, normalize::Bool=true)
     if δ ∈ sn.Δ
-        mvn = MvNormal(sn.μ, inv(sn.P))
-        z = Z(δ, sn.d)
+        f = exp(-_ϕ(δ, sn.μ, sn.P, sn.d))
 
-        return (γ(sn) / c(sn)) * Distributions.pdf(mvn, z)
+        if normalize
+            return f / c(sn.μ, sn.P, sn.Δ, sn.d)
+        else
+            return f
+        end
     else
         return 0
     end
@@ -46,52 +52,111 @@ function Z(δ::AbstractVector, d::Integer)
     z = monomials(x..., 1:d)
 
     # double reverse to achieve graded lexographic order
-    map(p -> p(reverse(δ)), z) |> reverse
+    return reverse(map(p -> p(reverse(δ)), z))
 end
 
-@memoize function c(sn::SlicedNormal)
-    mvn = MvNormal(sn.μ, inv(sn.P))
+@memoize function c(μ, P, Δ, d)
+    lb, ub = bounds(Δ)
 
-    lb, ub = support(sn)
-
-    normalization, _ = hcubature(x -> γ(sn) * Distributions.pdf(mvn, Z(x, sn.d)), lb, ub)
+    normalization, _ = hcubature(δ -> exp(-_ϕ(Z(δ, d), μ, P, d)), lb, ub)
 
     return normalization
 end
 
-@memoize function γ(sn::SlicedNormal)
-    (2 * π)^(length(sn.μ) / 2) * sqrt(det(inv(sn.P)))
-end
-
-
-@memoize function support(sn::SlicedNormal)
-    lb = [map(x -> x.lo, sn.Δ.v.data)...]
-    ub = [map(x -> x.hi, sn.Δ.v.data)...]
+function bounds(Δ::IntervalBox)
+    lb = [map(x -> x.lo, Δ.v.data)...]
+    ub = [map(x -> x.hi, Δ.v.data)...]
 
     return lb, ub
 end
 
-function Distributions.fit(x::AbstractMatrix, d::Integer)
-    z  = mapreduce(r -> Z(r, d) |> transpose, vcat, eachrow(x))
+function mean_and_covariance(x::AbstractMatrix, d::Integer)
+    z = mapreduce(r -> transpose(Z(r, d)), vcat, eachrow(x))
 
-    μ = mean(z, dims=1) |> vec
-    P = cov(LinearShrinkage(ConstantCorrelation()), z) |> inv |> PDMat
+    μ = vec(mean(z; dims=1))
+    P = PDMat(inv(cov(LinearShrinkage(ConstantCorrelation()), z)))
 
     return μ, P
 end
 
-function Base.rand(sn::SlicedNormal, n::Integer)
-    lb, ub = support(sn)
+function fit_baseline(x::AbstractMatrix, d::Integer)
+
+    lb = vec(minimum(x; dims=1))
+    ub = vec(maximum(x; dims=1))
+
+    Δ = IntervalBox(interval.(lb, ub)...)
+
+    return fit_baseline(x, d, Δ)
+end
+
+function fit_baseline(x::AbstractMatrix, d::Integer, Δ::IntervalBox)
+
+    μ, P = mean_and_covariance(x, d)
+    D = sum([_ϕ(δ, μ, P, d) for δ in eachrow(x)])
+
+    lb = getfield.(Δ, :lo)
+    ub = getfield.(Δ, :hi)
+
+    m = size(x, 1)
+
+    cΔ = hcubature(δ -> exp(-_ϕ(δ, μ, P.mat, d)), lb, ub)[1]
+    lh = m * log(1 / cΔ) - D
+
+    return SlicedNormal(d, μ, P, Δ), lh
+end
+
+function fit_scaling(x::AbstractMatrix, d::Integer)
+
+    lb = vec(minimum(x; dims=1))
+    ub = vec(maximum(x; dims=1))
+
+    Δ = IntervalBox(interval.(lb, ub)...)
+
+    return fit_scaling(x, d, Δ)
+end
+
+function fit_scaling(x::AbstractMatrix, d::Integer, Δ::IntervalBox)
+
+    μ, P = mean_and_covariance(x, d)
+
+    lb = getfield.(Δ, :lo)
+    ub = getfield.(Δ, :hi)
+
+    D = sum([_ϕ(δ, μ, P, d) for δ in eachrow(x)])
+
+    m = size(x, 1)
+
+    opt = Opt(:LN_NELDERMEAD, 1)
+    opt.lower_bounds = [0.0]
+    opt.xtol_rel = 1e-5
+    opt.min_objective =
+        (s, grad) -> begin
+            cΔ = hcubature(δ -> exp(-_ϕ(δ, μ, s[1] * P.mat, d)), lb, ub)[1]
+            lh = m * log(1 / cΔ) - s[1] * D
+            return -1 * lh
+        end
+
+    (lh, factor, _) = optimize(opt, [1.0])
+    return SlicedNormal(d, μ, factor[1] * P, Δ), -1 * lh
+end
+
+function rand(sn::SlicedNormal, n::Integer)
+    lb, ub = bounds(sn.Δ)
 
     prior = Uniform.(lb, ub)
 
-    logprior(x) = logpdf.(prior, x) |> sum
+    logprior(x) = sum(logpdf.(prior, x))
     sampler(n) = mapreduce(u -> rand(u, n), hcat, prior)
-    loglikelihood(x) = log.(pdf(sn, x))
+    loglikelihood(x) = log(SlicedNormals.pdf(sn, x, false))
 
     samples, _ = tmcmc(loglikelihood, logprior, sampler, n)
 
     return samples
+end
+
+function _ϕ(δ, μ, P, d)
+    z = Z(δ, d)
+    return ((z - μ)' * P * (z - μ)) / 2
 end
 
 end # module

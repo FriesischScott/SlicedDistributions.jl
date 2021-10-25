@@ -7,7 +7,7 @@ n = 500
 
 # Step 1
 θ = rand(Normal(π / 2, 1.3), n)
-r = 3 .+ rand(Uniform(0, 0.2), n) .* θ .- π / 2
+r = 3 .+ rand(Uniform(0, 0.2), n) .* (θ .- π / 2)
 
 δ1 = r .* cos.(θ)
 δ2 = r .* sin.(θ)
@@ -19,7 +19,7 @@ idx = δ1 .< 0
 
 # Step 2
 θ = rand(Normal(π / 2, 1.3), n)
-r = 3 .+ rand(Uniform(0, 0.2), n) .* θ .- π / 2
+r = 3 .+ rand(Uniform(0, 0.2), n) .* (θ .- π / 2)
 
 δ1 = r .* cos.(θ)
 δ2 = r .* sin.(θ)
@@ -31,23 +31,32 @@ idx = δ1 .< 0
 
 # Fit Sliced Normal Distribution
 d = 5
-μ, P = SlicedNormals.fit(δ, d)
-Δ = IntervalBox(-2.5..2.5, -2.5..2.5)
+b = 1000
 
-sn = SlicedNormal(d, μ, P, Δ)
+# Use baseline fit
+sn, lh = fit_baseline(δ, d)
+
+println("Baseline likelihood: $lh")
 
 samples = rand(sn, 1000)
 
-# Plot generated data and new samples
-p = scatter(δ[:, 1], δ[:, 2], aspect_ratio=:equal, lims=[-2.5, 2.5], xlab="δ1", ylab="δ2", legend=:none)
-scatter!(p, samples[:, 1], samples[:, 2])
+p = scatter(
+    δ[:, 1], δ[:, 2]; aspect_ratio=:equal, lims=[-4, 4], xlab="δ1", ylab="δ2", label="data"
+)
+scatter!(p, samples[:, 1], samples[:, 2]; label="samples")
 
-# Plot sliced normal density
-resolution = 100
-x = range(-2.5, 2.5, length=resolution)
-y = range(-2.5, 2.5, length=resolution)
-z = zeros(resolution, resolution)
+display(p)
 
-z = [pdf(sn, [x[i], y[j]]) for i = 1:resolution, j = 1:resolution]
+# Use baseline fit and then scale P
+sn, lh = fit_scaling(δ, d)
 
-contourf(x, y, z, aspect_ratio=:equal, lims=[-2.5, 2.5], c=:tempo)
+println("Scaling likelihood: $lh")
+
+samples = rand(sn, 1000)
+
+p = scatter(
+    δ[:, 1], δ[:, 2]; aspect_ratio=:equal, lims=[-4, 4], xlab="δ1", ylab="δ2", label="data"
+)
+scatter!(p, samples[:, 1], samples[:, 2]; label="samples")
+
+display(p)

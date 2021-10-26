@@ -60,3 +60,31 @@ p = scatter(
 scatter!(p, samples[:, 1], samples[:, 2]; label="samples")
 
 display(p)
+
+function meshgrid(xin,yin)
+    nx=length(xin)
+    ny=length(yin)
+    xout=zeros(ny,nx)
+    yout=zeros(ny,nx)
+    for jx=1:nx
+        for ix=1:ny
+            xout[ix,jx]=xin[jx]
+            yout[ix,jx]=yin[ix]
+        end
+    end
+    return (x=xout, y=yout)
+end
+
+Numel = 200
+xs = range(-4, 4, length = Numel)
+ys = range(-4, 4, length = Numel)
+
+X,Y = meshgrid(xs,ys)
+XY = [X[:] Y[:]]
+
+using SlicedNormals: pdf
+
+densXY = [pdf(sn,XY[i,:], false) for i = 1:length(XY[:,1])]
+densXY = reshape(densXY, size(X))
+
+contour!(xs, ys, densXY)

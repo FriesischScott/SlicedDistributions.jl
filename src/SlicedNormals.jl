@@ -64,8 +64,8 @@ end
 end
 
 function bounds(Δ::IntervalBox)
-    lb = [map(x -> x.lo, Δ.v.data)...]
-    ub = [map(x -> x.hi, Δ.v.data)...]
+    lb = getfield.(Δ, :lo)
+    ub = getfield.(Δ, :hi)
 
     return lb, ub
 end
@@ -94,8 +94,7 @@ function fit_baseline(x::AbstractMatrix, d::Integer, Δ::IntervalBox)
     μ, P = mean_and_covariance(x, d)
     D = sum([_ϕ(δ, μ, P, d) for δ in eachrow(x)])
 
-    lb = getfield.(Δ, :lo)
-    ub = getfield.(Δ, :hi)
+    lb, ub = bounds(Δ)
 
     m = size(x, 1)
 
@@ -119,8 +118,7 @@ function fit_scaling(x::AbstractMatrix, d::Integer, Δ::IntervalBox)
 
     μ, P = mean_and_covariance(x, d)
 
-    lb = getfield.(Δ, :lo)
-    ub = getfield.(Δ, :hi)
+    lb, ub = bounds(Δ)
 
     D = sum([_ϕ(δ, μ, P, d) for δ in eachrow(x)])
 

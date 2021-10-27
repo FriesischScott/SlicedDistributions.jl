@@ -38,7 +38,7 @@ sn, lh = fit_baseline(δ, d)
 
 println("Baseline likelihood: $lh")
 
-samples = rand(sn, 1000)
+samples = rand(sn, 500)
 
 p = scatter(
     δ[:, 1], δ[:, 2]; aspect_ratio=:equal, lims=[-4, 4], xlab="δ1", ylab="δ2", label="data"
@@ -52,7 +52,7 @@ sn, lh = fit_scaling(δ, d)
 
 println("Scaling likelihood: $lh")
 
-samples = rand(sn, 1000)
+samples = rand(sn, 500)
 
 p = scatter(
     δ[:, 1], δ[:, 2]; aspect_ratio=:equal, lims=[-4, 4], xlab="δ1", ylab="δ2", label="data"
@@ -61,30 +61,8 @@ scatter!(p, samples[:, 1], samples[:, 2]; label="samples")
 
 display(p)
 
-function meshgrid(xin,yin)
-    nx=length(xin)
-    ny=length(yin)
-    xout=zeros(ny,nx)
-    yout=zeros(ny,nx)
-    for jx=1:nx
-        for ix=1:ny
-            xout[ix,jx]=xin[jx]
-            yout[ix,jx]=yin[ix]
-        end
-    end
-    return (x=xout, y=yout)
-end
+# Plot density
+xs = range(-4, 4; length=200)
+ys = range(-4, 4; length=200)
 
-Numel = 200
-xs = range(-4, 4, length = Numel)
-ys = range(-4, 4, length = Numel)
-
-X,Y = meshgrid(xs,ys)
-XY = [X[:] Y[:]]
-
-using SlicedNormals: pdf
-
-densXY = [pdf(sn,XY[i,:], false) for i = 1:length(XY[:,1])]
-densXY = reshape(densXY, size(X))
-
-contour!(xs, ys, densXY)
+contour!(xs, ys, (x, y) -> SlicedNormals.pdf(sn, [x, y], false))

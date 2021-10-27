@@ -38,7 +38,7 @@ sn, lh = fit_baseline(δ, d)
 
 println("Baseline likelihood: $lh")
 
-samples = rand(sn, 1000)
+samples = rand(sn, 500)
 
 p = scatter(
     δ[:, 1], δ[:, 2]; aspect_ratio=:equal, lims=[-4, 4], xlab="δ1", ylab="δ2", label="data"
@@ -52,7 +52,7 @@ sn, lh = fit_scaling(δ, d)
 
 println("Scaling likelihood: $lh")
 
-samples = rand(sn, 1000)
+samples = rand(sn, 500)
 
 p = scatter(
     δ[:, 1], δ[:, 2]; aspect_ratio=:equal, lims=[-4, 4], xlab="δ1", ylab="δ2", label="data"
@@ -60,3 +60,9 @@ p = scatter(
 scatter!(p, samples[:, 1], samples[:, 2]; label="samples")
 
 display(p)
+
+# Plot density
+xs = range(-4, 4; length=200)
+ys = range(-4, 4; length=200)
+
+contour!(xs, ys, (x, y) -> SlicedNormals.pdf(sn, [x, y], false))

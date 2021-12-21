@@ -3,10 +3,10 @@ module SlicedNormals
 using CovarianceEstimation
 using Distributions
 using DynamicPolynomials
-using HCubature
 using IntervalArithmetic
 using LinearAlgebra
 using Memoize
+using MinimumVolumeEllipsoids
 using NLopt
 using PDMats
 using TransitionalMCMC
@@ -20,6 +20,7 @@ struct SlicedNormal
     μ::AbstractVector
     P::AbstractPDMat
     Δ::IntervalBox
+    δ::AbstractMatrix
 end
 
 function pdf(sn::SlicedNormal, δ::AbstractVector, normalize::Bool=true)
@@ -27,7 +28,7 @@ function pdf(sn::SlicedNormal, δ::AbstractVector, normalize::Bool=true)
         f = exp(-_ϕ(δ, sn.μ, sn.P, sn.d))
 
         if normalize
-            return f / c(sn.μ, sn.P, sn.Δ, sn.d)
+            return f / c(sn.μ, sn.P, sn.d, sn.δ)
         else
             return f
         end
@@ -55,12 +56,15 @@ function Z(δ::AbstractVector, d::Integer)
     return reverse(map(p -> p(reverse(δ)), z))
 end
 
-@memoize function c(μ, P, Δ, d)
-    lb, ub = bounds(Δ)
+@memoize function c(
+    μ::AbstractVector, P::AbstractPDMat, d::Integer, x::AbstractMatrix, b::Integer=10000
+)
+    ϵ = minimum_volume_ellipsoid(x')
 
-    normalization, _ = hcubature(δ -> exp(-_ϕ(Z(δ, d), μ, P, d)), lb, ub)
+    V = volume(ϵ)
+    u = rand(ϵ, b)
 
-    return normalization
+    return V / b * sum([exp(-_ϕ(δ, μ, P, d)) for δ in eachcol(u)])
 end
 
 function bounds(Δ::IntervalBox)
@@ -80,7 +84,6 @@ function mean_and_covariance(x::AbstractMatrix, d::Integer)
 end
 
 function fit_baseline(x::AbstractMatrix, d::Integer)
-
     lb = vec(minimum(x; dims=1))
     ub = vec(maximum(x; dims=1))
 
@@ -90,22 +93,18 @@ function fit_baseline(x::AbstractMatrix, d::Integer)
 end
 
 function fit_baseline(x::AbstractMatrix, d::Integer, Δ::IntervalBox)
-
     μ, P = mean_and_covariance(x, d)
     D = sum([_ϕ(δ, μ, P, d) for δ in eachrow(x)])
 
-    lb, ub = bounds(Δ)
-
     m = size(x, 1)
 
-    cΔ = hcubature(δ -> exp(-_ϕ(δ, μ, P.mat, d)), lb, ub)[1]
+    cΔ = c(μ, P, d, x)
     lh = m * log(1 / cΔ) - D
 
-    return SlicedNormal(d, μ, P, Δ), lh
+    return SlicedNormal(d, μ, P, Δ, x), lh
 end
 
 function fit_scaling(x::AbstractMatrix, d::Integer)
-
     lb = vec(minimum(x; dims=1))
     ub = vec(maximum(x; dims=1))
 
@@ -114,28 +113,30 @@ function fit_scaling(x::AbstractMatrix, d::Integer)
     return fit_scaling(x, d, Δ)
 end
 
-function fit_scaling(x::AbstractMatrix, d::Integer, Δ::IntervalBox)
-
+function fit_scaling(x::AbstractMatrix, d::Integer, Δ::IntervalBox, b::Integer=10000)
     μ, P = mean_and_covariance(x, d)
-
-    lb, ub = bounds(Δ)
 
     D = sum([_ϕ(δ, μ, P, d) for δ in eachrow(x)])
 
     m = size(x, 1)
 
+    ϵ = minimum_volume_ellipsoid(x')
+
+    U = rand(ϵ, b)
+    V = volume(ϵ)
+
     opt = Opt(:LN_NELDERMEAD, 1)
     opt.lower_bounds = [0.0]
     opt.xtol_rel = 1e-5
     opt.min_objective =
-        (s, grad) -> begin
-            cΔ = hcubature(δ -> exp(-_ϕ(δ, μ, s[1] * P.mat, d)), lb, ub)[1]
+        (s, _) -> begin
+            cΔ = V / b * sum([exp(-_ϕ(δ, μ, s[1] * P, d)) for δ in eachcol(U)])
             lh = m * log(1 / cΔ) - s[1] * D
             return -1 * lh
         end
 
     (lh, factor, _) = optimize(opt, [1.0])
-    return SlicedNormal(d, μ, factor[1] * P, Δ), -1 * lh
+    return SlicedNormal(d, μ, factor[1] * P, Δ, x), -1 * lh
 end
 
 function rand(sn::SlicedNormal, n::Integer)

@@ -5,7 +5,6 @@ using Distributions
 using DynamicPolynomials
 using IntervalArithmetic
 using LinearAlgebra
-using Memoize
 using MinimumVolumeEllipsoids
 using Optim
 using TransitionalMCMC
@@ -19,18 +18,12 @@ struct SlicedNormal
     μ::AbstractVector
     P::AbstractMatrix
     Δ::IntervalBox
-    δ::AbstractMatrix
+    c::Float64
 end
 
-function pdf(sn::SlicedNormal, δ::AbstractVector, normalize::Bool=true)
+function pdf(sn::SlicedNormal, δ::AbstractVector)
     if δ ∈ sn.Δ
-        f = exp(-_ϕ(δ, sn.μ, sn.P, sn.d))
-
-        if normalize
-            return f / c(sn.μ, sn.P, sn.d, sn.δ)
-        else
-            return f
-        end
+        return exp(-_ϕ(δ, sn.μ, sn.P, sn.d)) / sn.c
     else
         return 0
     end
@@ -55,7 +48,7 @@ function Z(δ::AbstractVector, d::Integer)
     return map(p -> p(δ), z)
 end
 
-@memoize function c(
+function c(
     μ::AbstractVector, P::AbstractMatrix, d::Integer, x::AbstractMatrix, b::Integer=10000
 )
     ϵ = minimum_volume_ellipsoid(x')
@@ -100,7 +93,7 @@ function fit_baseline(x::AbstractMatrix, d::Integer, Δ::IntervalBox)
     cΔ = c(μ, P, d, x)
     lh = m * log(1 / cΔ) - D
 
-    return SlicedNormal(d, μ, P, Δ, x), lh
+    return SlicedNormal(d, μ, P, Δ, cΔ), lh
 end
 
 function fit_scaling(x::AbstractMatrix, d::Integer)
@@ -135,7 +128,7 @@ function fit_scaling(x::AbstractMatrix, d::Integer, Δ::IntervalBox, b::Integer=
     cΔ = volume(ϵ) / b * sum([exp(-_ϕ(δ, μ, γ .* P, d)) for δ in eachcol(U)])
     lh = m * log(1 / cΔ) - D
 
-    return SlicedNormal(d, μ, γ * P, Δ, x), lh
+    return SlicedNormal(d, μ, γ * P, Δ, cΔ), lh
 end
 
 function fit_augmentation(x::AbstractMatrix, d::Integer, b::Integer=10000)
@@ -193,7 +186,7 @@ function fit_augmentation(x::AbstractMatrix, d::Integer, b::Integer=10000)
 
     Δ = IntervalBox(interval.(lb, ub)...)
 
-    return SlicedNormal(d, μ, Γ .* P, Δ, x), lh
+    return SlicedNormal(d, μ, Γ .* P, Δ, cΔ), lh
 end
 
 function rand(sn::SlicedNormal, n::Integer)
@@ -203,7 +196,7 @@ function rand(sn::SlicedNormal, n::Integer)
 
     logprior(x) = sum(logpdf.(prior, x))
     sampler(n) = mapreduce(u -> rand(u, n), hcat, prior)
-    loglikelihood(x) = log(SlicedNormals.pdf(sn, x, false))
+    loglikelihood(x) = log(SlicedNormals.pdf(sn, x))
 
     samples, _ = tmcmc(loglikelihood, logprior, sampler, n)
 

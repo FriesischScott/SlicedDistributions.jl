@@ -65,4 +65,4 @@ display(p)
 xs = range(-4, 4; length=200)
 ys = range(-4, 4; length=200)
 
-contour!(xs, ys, (x, y) -> SlicedNormals.pdf(sn, [x, y], false))
+contour!(xs, ys, (x, y) -> SlicedNormals.pdf(sn, [x, y]))

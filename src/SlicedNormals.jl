@@ -7,7 +7,6 @@ using IntervalArithmetic
 using LinearAlgebra
 using Memoize
 using MinimumVolumeEllipsoids
-using NLopt
 using Optim
 using TransitionalMCMC
 
@@ -123,20 +122,20 @@ function fit_scaling(x::AbstractMatrix, d::Integer, Δ::IntervalBox, b::Integer=
     ϵ = minimum_volume_ellipsoid(x')
 
     U = rand(ϵ, b)
-    V = volume(ϵ)
 
-    opt = Opt(:LN_NELDERMEAD, 1)
-    opt.lower_bounds = [0.0]
-    opt.xtol_rel = 1e-5
-    opt.min_objective =
-        (s, _) -> begin
-            cΔ = V / b * sum([exp(-_ϕ(δ, μ, s[1] * P, d)) for δ in eachcol(U)])
-            lh = m * log(1 / cΔ) - s[1] * D
-            return -1 * lh
-        end
+    sᵢ = [_ϕ(δ, μ, P, d) for δ in eachcol(U)]
 
-    (lh, factor, _) = NLopt.optimize(opt, [1.0])
-    return SlicedNormal(d, μ, factor[1] * P, Δ, x), -1 * lh
+    f = γ -> -m * log(sum(exp.(-γ[1] .* sᵢ))) - γ[1] * D
+
+    opt = maximize(f, [1.0], LBFGS())
+
+    γ = Optim.maximizer(opt)[1]
+
+    D = sum([_ϕ(δ, μ, γ .* P, d) for δ in eachrow(x)])
+    cΔ = volume(ϵ) / b * sum([exp(-_ϕ(δ, μ, γ .* P, d)) for δ in eachcol(U)])
+    lh = m * log(1 / cΔ) - D
+
+    return SlicedNormal(d, μ, γ * P, Δ, x), lh
 end
 
 function fit_augmentation(x::AbstractMatrix, d::Integer, b::Integer=10000)

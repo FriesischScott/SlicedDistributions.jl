@@ -11,7 +11,7 @@ using TransitionalMCMC
 
 import Base: rand
 
-export SlicedNormal, Z, rand, pdf, fit_baseline, fit_scaling, fit_augmentation
+export SlicedNormal, Z, rand, pdf, fit_baseline, fit_physical, fit_scaling, fit_augmentation
 
 struct SlicedNormal
     d::Integer
@@ -84,6 +84,67 @@ function fit_baseline(x::AbstractMatrix, d::Integer)
     return fit_baseline(x, d, Δ)
 end
 
+function fit_physical(x::AbstractMatrix, d::Integer)
+    lb = vec(minimum(x; dims=1))
+    ub = vec(maximum(x; dims=1))
+
+    Δ = IntervalBox(interval.(lb, ub)...)
+
+    μ, P = mean_and_covariance(x, d)
+
+    p = length(μ)
+    n = size(x, 1)
+
+    ϵ = minimum_volume_ellipsoid(x')
+
+    b = 10000
+    V = volume(ϵ)
+    u = rand(ϵ, b)
+
+    # A = cholesky(P).U
+
+    x0 = [μ..., vcat([P[1:i, i] for i in 1:p]...)...]
+
+    function f(x_opt)
+        μ_opt = x_opt[1:p]
+        P_opt = zeros(eltype(x_opt), p, p)
+
+        start = p + 1
+        for i in 1:p
+            P_opt[1:i, i] = x_opt[start:(start + i - 1)]
+            start += i
+        end
+
+        P_opt = P_opt' + P_opt - Diagonal(P_opt)
+
+        c = V / b * sum([exp(-_ϕ(δ, μ_opt, P_opt, d)) for δ in eachcol(u)])
+
+        lh = -n * log(c) - sum([_ϕ(δ, μ_opt, P_opt, d) for δ in eachrow(x)])
+
+        return lh
+    end
+
+    res = maximize(f, x0, LBFGS(); autodiff=:forward)
+
+    @show res
+
+    x_opt = Optim.maximizer(res)
+    lh = Optim.maximum(res)
+
+    μ = x_opt[1:p]
+    P = zeros(p, p)
+
+    start = p + 1
+    for i in 1:p
+        P[1:i, i] = x_opt[start:(start + i - 1)]
+        start += i
+    end
+
+    P = P' * P
+
+    return SlicedNormal(d, μ, P, Δ, 1), lh
+end
+
 function fit_baseline(x::AbstractMatrix, d::Integer, Δ::IntervalBox)
     μ, P = mean_and_covariance(x, d)
     D = sum([_ϕ(δ, μ, P, d) for δ in eachrow(x)])
@@ -134,9 +195,16 @@ end
 function fit_augmentation(x::AbstractMatrix, d::Integer, b::Integer=10000)
     μ, P = mean_and_covariance(x, d)
 
+    lb = vec(minimum(x; dims=1)) .* 1.1
+    ub = vec(maximum(x; dims=1)) .* 1.1
+
+    Δ = IntervalBox(interval.(lb, ub)...)
+
     # Augmentation
-    ϵ = minimum_volume_ellipsoid(x')
-    s = rand(ϵ, b)
+    # ϵ = minimum_volume_ellipsoid(x')
+    # s = rand(ϵ, b)
+
+    s = vcat(rand.(Uniform.(lb, ub), 1, b)...)
 
     Γ = ones(size(P))
     m = size(x, 1)
@@ -178,13 +246,8 @@ function fit_augmentation(x::AbstractMatrix, d::Integer, b::Integer=10000)
     end
 
     D = sum([_ϕ(δ, μ, Γ .* P, d) for δ in eachrow(x)])
-    cΔ = volume(ϵ) / b * sum([exp(-_ϕ(δ, μ, Γ .* P, d)) for δ in eachcol(s)])
+    cΔ = prod(ub .- lb) / b * sum([exp(-_ϕ(δ, μ, Γ .* P, d)) for δ in eachcol(s)])
     lh = m * log(1 / cΔ) - D
-
-    lb = vec(minimum(x; dims=1))
-    ub = vec(maximum(x; dims=1))
-
-    Δ = IntervalBox(interval.(lb, ub)...)
 
     return SlicedNormal(d, μ, Γ .* P, Δ, cΔ), lh
 end

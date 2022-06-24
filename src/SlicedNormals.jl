@@ -11,19 +11,63 @@ using TransitionalMCMC
 
 import Base: rand
 
-export SlicedNormal, Z, rand, pdf, fit_baseline, fit_physical, fit_scaling, fit_augmentation
+export SlicedNormal, rand, pdf
 
 struct SlicedNormal
     d::Integer
+    λ::AbstractVector
     μ::AbstractVector
-    P::AbstractMatrix
+    M::AbstractMatrix
     Δ::IntervalBox
     c::Float64
 end
 
+function SlicedNormal(δ::AbstractMatrix, d::Integer, b::Integer=10000)
+    ϵ = minimum_volume_ellipsoid(δ')
+    s = rand(ϵ, b)
+
+    zδ = mapreduce(r -> transpose(Z(r, d)), vcat, eachrow(δ))
+    zΔ = mapreduce(r -> transpose(Z(r, d)), vcat, eachcol(s))
+
+    μ, P = mean_and_covariance(zδ)
+
+    M = cholesky(P).U
+
+    zsosδ = transpose(mapreduce(z -> Zsos(z, μ, M), hcat, eachrow(zδ)))
+    zsosΔ = transpose(mapreduce(z -> Zsos(z, μ, M), hcat, eachrow(zΔ)))
+
+    m = size(δ, 1)
+
+    function f(λ)
+        D = sum([ϕE(x, λ) for x in eachrow(zsosδ)]) / 2
+        cΔ = volume(ϵ) / b * sum([exp(-ϕE(δ, λ) / 2) for δ in eachrow(zsosΔ)])
+
+        lh = -m * log(cΔ) - D
+        return -lh
+    end
+
+    nz = size(zδ, 2)
+
+    opt = optimize(
+        f, zeros(nz), Inf .* ones(nz), ones(nz), Fminbox(LBFGS()); autodiff=:forward
+    )
+
+    λ = Optim.minimizer(opt)
+    lh = -1 * Optim.minimum(opt)
+
+    lb = vec(minimum(δ; dims=1)) .* 1.1
+    ub = vec(maximum(δ; dims=1)) .* 1.1
+
+    Δ = IntervalBox(interval.(lb, ub)...)
+
+    cΔ = volume(ϵ) / b * sum([exp(-ϕE(δ, λ) / 2) for δ in eachrow(zsosΔ)])
+    return SlicedNormal(d, λ, μ, M, Δ, cΔ), lh
+end
+
 function pdf(sn::SlicedNormal, δ::AbstractVector)
     if δ ∈ sn.Δ
-        return exp(-_ϕ(δ, sn.μ, sn.P, sn.d)) / sn.c
+        z = Zsos(Z(δ, sn.d), sn)
+        return exp(-ϕE(z, sn.λ) / 2) / sn.c
     else
         return 0
     end
@@ -48,6 +92,12 @@ function Z(δ::AbstractVector, d::Integer)
     return map(p -> p(δ), z)
 end
 
+function Zsos(z::AbstractVector, μ::AbstractVector, M::AbstractMatrix)
+    return (M * (z - μ)) .^ 2
+end
+
+Zsos(z::AbstractVector, sn::SlicedNormal) = Zsos(z, sn.μ, sn.M)
+
 function c(
     μ::AbstractVector, P::AbstractMatrix, d::Integer, x::AbstractMatrix, b::Integer=10000
 )
@@ -66,190 +116,11 @@ function bounds(Δ::IntervalBox)
     return lb, ub
 end
 
-function mean_and_covariance(x::AbstractMatrix, d::Integer)
-    z = mapreduce(r -> transpose(Z(r, d)), vcat, eachrow(x))
-
+function mean_and_covariance(z::AbstractMatrix)
     μ = vec(mean(z; dims=1))
     P = inv(cov(LinearShrinkage(ConstantCorrelation()), z))
 
     return μ, P
-end
-
-function fit_baseline(x::AbstractMatrix, d::Integer)
-    lb = vec(minimum(x; dims=1))
-    ub = vec(maximum(x; dims=1))
-
-    Δ = IntervalBox(interval.(lb, ub)...)
-
-    return fit_baseline(x, d, Δ)
-end
-
-function fit_physical(x::AbstractMatrix, d::Integer)
-    lb = vec(minimum(x; dims=1))
-    ub = vec(maximum(x; dims=1))
-
-    Δ = IntervalBox(interval.(lb, ub)...)
-
-    μ, P = mean_and_covariance(x, d)
-
-    p = length(μ)
-    n = size(x, 1)
-
-    ϵ = minimum_volume_ellipsoid(x')
-
-    b = 10000
-    V = volume(ϵ)
-    u = rand(ϵ, b)
-
-    # A = cholesky(P).U
-
-    x0 = [μ..., vcat([P[1:i, i] for i in 1:p]...)...]
-
-    function f(x_opt)
-        μ_opt = x_opt[1:p]
-        P_opt = zeros(eltype(x_opt), p, p)
-
-        start = p + 1
-        for i in 1:p
-            P_opt[1:i, i] = x_opt[start:(start + i - 1)]
-            start += i
-        end
-
-        P_opt = P_opt' + P_opt - Diagonal(P_opt)
-
-        c = V / b * sum([exp(-_ϕ(δ, μ_opt, P_opt, d)) for δ in eachcol(u)])
-
-        lh = -n * log(c) - sum([_ϕ(δ, μ_opt, P_opt, d) for δ in eachrow(x)])
-
-        return lh
-    end
-
-    res = maximize(f, x0, LBFGS(); autodiff=:forward)
-
-    @show res
-
-    x_opt = Optim.maximizer(res)
-    lh = Optim.maximum(res)
-
-    μ = x_opt[1:p]
-    P = zeros(p, p)
-
-    start = p + 1
-    for i in 1:p
-        P[1:i, i] = x_opt[start:(start + i - 1)]
-        start += i
-    end
-
-    P = P' * P
-
-    return SlicedNormal(d, μ, P, Δ, 1), lh
-end
-
-function fit_baseline(x::AbstractMatrix, d::Integer, Δ::IntervalBox)
-    μ, P = mean_and_covariance(x, d)
-    D = sum([_ϕ(δ, μ, P, d) for δ in eachrow(x)])
-
-    m = size(x, 1)
-
-    cΔ = c(μ, P, d, x)
-    lh = m * log(1 / cΔ) - D
-
-    return SlicedNormal(d, μ, P, Δ, cΔ), lh
-end
-
-function fit_scaling(x::AbstractMatrix, d::Integer)
-    lb = vec(minimum(x; dims=1))
-    ub = vec(maximum(x; dims=1))
-
-    Δ = IntervalBox(interval.(lb, ub)...)
-
-    return fit_scaling(x, d, Δ)
-end
-
-function fit_scaling(x::AbstractMatrix, d::Integer, Δ::IntervalBox, b::Integer=10000)
-    μ, P = mean_and_covariance(x, d)
-
-    D = sum([_ϕ(δ, μ, P, d) for δ in eachrow(x)])
-
-    m = size(x, 1)
-
-    ϵ = minimum_volume_ellipsoid(x')
-
-    U = rand(ϵ, b)
-
-    sᵢ = [_ϕ(δ, μ, P, d) for δ in eachcol(U)]
-
-    f = γ -> -m * log(sum(exp.(-γ[1] .* sᵢ))) - γ[1] * D
-
-    opt = maximize(f, [1.0], LBFGS())
-
-    γ = Optim.maximizer(opt)[1]
-
-    D = sum([_ϕ(δ, μ, γ .* P, d) for δ in eachrow(x)])
-    cΔ = volume(ϵ) / b * sum([exp(-_ϕ(δ, μ, γ .* P, d)) for δ in eachcol(U)])
-    lh = m * log(1 / cΔ) - D
-
-    return SlicedNormal(d, μ, γ * P, Δ, cΔ), lh
-end
-
-function fit_augmentation(x::AbstractMatrix, d::Integer, b::Integer=10000)
-    μ, P = mean_and_covariance(x, d)
-
-    lb = vec(minimum(x; dims=1)) .* 1.1
-    ub = vec(maximum(x; dims=1)) .* 1.1
-
-    Δ = IntervalBox(interval.(lb, ub)...)
-
-    # Augmentation
-    # ϵ = minimum_volume_ellipsoid(x')
-    # s = rand(ϵ, b)
-
-    s = vcat(rand.(Uniform.(lb, ub), 1, b)...)
-
-    Γ = ones(size(P))
-    m = size(x, 1)
-
-    for ν in Iterators.filter(ν -> ν[1] <= ν[2], CartesianIndices(P))
-        M = zeros(size(P))
-        M[ν] = P[ν] .* Γ[ν]
-
-        # mirror off-diagonal entries (symmetry)
-        if ν[1] < ν[2]
-            M[ν[2], ν[1]] = P[ν[2], ν[1]] .* Γ[ν[2], ν[1]]
-        end
-
-        N = P .* Γ - M
-
-        β = [_ϕ(sᵢ, μ, N, d) for sᵢ in eachcol(s)]
-        α = [_ϕ(sᵢ, μ, M, d) for sᵢ in eachcol(s)]
-
-        κ = [_ϕ(δᵢ, μ, M, d) for δᵢ in eachrow(x)]
-        φ = [_ϕ(δᵢ, μ, N, d) for δᵢ in eachrow(x)]
-
-        f = γ -> -m * log(sum(exp.(-γ[1] .* α + β))) - sum(γ[1] .* κ + φ)
-
-        function g!(G, γ)
-            return G[1] =
-                -m * sum(-α .* exp.(-γ[1] .* α .+ β)) / sum(exp.(-γ[1] .* α .+ β)) - sum(κ)
-        end
-
-        opt = maximize(f, g!, [0.0], LBFGS())
-
-        γ = Optim.maximizer(opt)[1]
-
-        Γ[ν] += γ
-
-        # mirror off-diagonal entries (symmetry)
-        if ν[1] < ν[2]
-            Γ[ν[2], ν[1]] += γ
-        end
-    end
-
-    D = sum([_ϕ(δ, μ, Γ .* P, d) for δ in eachrow(x)])
-    cΔ = prod(ub .- lb) / b * sum([exp(-_ϕ(δ, μ, Γ .* P, d)) for δ in eachcol(s)])
-    lh = m * log(1 / cΔ) - D
-
-    return SlicedNormal(d, μ, Γ .* P, Δ, cΔ), lh
 end
 
 function rand(sn::SlicedNormal, n::Integer)
@@ -266,9 +137,8 @@ function rand(sn::SlicedNormal, n::Integer)
     return samples
 end
 
-function _ϕ(δ, μ, P, d)
-    z = Z(δ, d)
-    return ((z - μ)' * P * (z - μ)) / 2
+function ϕE(z::AbstractVector, λ::AbstractVector)
+    return λ' * z
 end
 
 end # module

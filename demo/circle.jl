@@ -1,5 +1,4 @@
 using Distributions
-using IntervalArithmetic
 using Plots
 using SlicedNormals
 
@@ -31,28 +30,14 @@ idx = δ1 .< 0
 
 # Fit Sliced Normal Distribution
 d = 5
-b = 1000
+b = 10000
 
 # Use baseline fit
-sn, lh = fit_baseline(δ, d)
+sn, lh = SlicedNormal(δ, d, b)
 
-println("Baseline likelihood: $lh")
+println("Likelihood: $lh")
 
-samples = rand(sn, 500)
-
-p = scatter(
-    δ[:, 1], δ[:, 2]; aspect_ratio=:equal, lims=[-4, 4], xlab="δ1", ylab="δ2", label="data"
-)
-scatter!(p, samples[:, 1], samples[:, 2]; label="samples")
-
-display(p)
-
-# Use baseline fit and then scale P
-sn, lh = fit_scaling(δ, d)
-
-println("Scaling likelihood: $lh")
-
-samples = rand(sn, 500)
+samples = rand(sn, 1000)
 
 p = scatter(
     δ[:, 1], δ[:, 2]; aspect_ratio=:equal, lims=[-4, 4], xlab="δ1", ylab="δ2", label="data"

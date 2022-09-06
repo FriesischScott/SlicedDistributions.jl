@@ -4,9 +4,10 @@ using CovarianceEstimation
 using Distributions
 using DynamicPolynomials
 using IntervalArithmetic
+using JuMP
 using LinearAlgebra
 using MinimumVolumeEllipsoids
-using Optim
+using NLopt
 using TransitionalMCMC
 
 import Base: rand
@@ -37,31 +38,34 @@ function SlicedNormal(δ::AbstractMatrix, d::Integer, b::Integer=10000)
     zsosΔ = transpose(mapreduce(z -> Zsos(z, μ, M), hcat, eachrow(zΔ)))
 
     m = size(δ, 1)
+    nz = size(zδ, 2)
 
-    function f(λ)
-        D = sum([ϕE(x, λ) for x in eachrow(zsosδ)]) / 2
-        cΔ = volume(ϵ) / b * sum([exp(-ϕE(δ, λ) / 2) for δ in eachrow(zsosΔ)])
+    D = λ -> sum([ϕE(x, λ) for x in eachrow(zsosδ)] / 2)
+    cΔ = λ -> volume(ϵ) / b * sum([exp.(-ϕE(δ, λ) / 2) for δ in eachrow(zsosΔ)])
 
-        lh = -m * log(cΔ) - D
-        return -lh
+    function f(λ...)
+        return -1 * (-m * log(cΔ(λ)) - D(λ))
     end
 
     nz = size(zδ, 2)
 
-    opt = optimize(
-        f, zeros(nz), Inf .* ones(nz), ones(nz), Fminbox(LBFGS()); autodiff=:forward
-    )
+    model = Model(NLopt.Optimizer)
+    set_optimizer_attribute(model, "algorithm", NLopt.LD_SLSQP)
 
-    λ = Optim.minimizer(opt)
-    lh = -1 * Optim.minimum(opt)
+    @variable(model, λ[1:nz] >= 0.0)
 
-    lb = vec(minimum(δ; dims=1)) .* 1.1
-    ub = vec(maximum(δ; dims=1)) .* 1.1
+    register(model, :f, nz, f; autodiff=true)
+    @NLobjective(model, Min, f(λ...))
+
+    JuMP.optimize!(model)
+
+    lb = vec(minimum(δ; dims=1))
+    ub = vec(maximum(δ; dims=1))
 
     Δ = IntervalBox(interval.(lb, ub)...)
 
-    cΔ = volume(ϵ) / b * sum([exp(-ϕE(δ, λ) / 2) for δ in eachrow(zsosΔ)])
-    return SlicedNormal(d, λ, μ, M, Δ, cΔ), lh
+    cΔ = volume(ϵ) / b * sum([exp(-ϕE(δ, value.(λ)) / 2) for δ in eachrow(zsosΔ)])
+    return SlicedNormal(d, value.(λ), μ, M, Δ, cΔ), -objective_value(model)
 end
 
 function pdf(sn::SlicedNormal, δ::AbstractVector)

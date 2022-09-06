@@ -137,8 +137,8 @@ function rand(sn::SlicedNormal, n::Integer)
     return samples
 end
 
-function ϕE(z::AbstractVector, λ::AbstractVector)
-    return λ' * z
+function ϕE(z, λ)
+    return dot(λ, z)
 end
 
 end # module

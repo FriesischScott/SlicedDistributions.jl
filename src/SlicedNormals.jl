@@ -4,34 +4,74 @@ using CovarianceEstimation
 using Distributions
 using DynamicPolynomials
 using IntervalArithmetic
+using JuMP
 using LinearAlgebra
-using Memoize
 using MinimumVolumeEllipsoids
 using NLopt
-using PDMats
 using TransitionalMCMC
 
 import Base: rand
 
-export SlicedNormal, Z, rand, pdf, fit_baseline, fit_scaling
+export SlicedNormal, rand, pdf
 
 struct SlicedNormal
     d::Integer
+    λ::AbstractVector
     μ::AbstractVector
-    P::AbstractPDMat
+    M::AbstractMatrix
     Δ::IntervalBox
-    δ::AbstractMatrix
+    c::Float64
 end
 
-function pdf(sn::SlicedNormal, δ::AbstractVector, normalize::Bool=true)
-    if δ ∈ sn.Δ
-        f = exp(-_ϕ(δ, sn.μ, sn.P, sn.d))
+function SlicedNormal(δ::AbstractMatrix, d::Integer, b::Integer=10000)
+    ϵ = minimum_volume_ellipsoid(δ')
+    s = rand(ϵ, b)
 
-        if normalize
-            return f / c(sn.μ, sn.P, sn.d, sn.δ)
-        else
-            return f
-        end
+    zδ = mapreduce(r -> transpose(Z(r, d)), vcat, eachrow(δ))
+    zΔ = mapreduce(r -> transpose(Z(r, d)), vcat, eachcol(s))
+
+    μ, P = mean_and_covariance(zδ)
+
+    M = cholesky(P).U
+
+    zsosδ = transpose(mapreduce(z -> Zsos(z, μ, M), hcat, eachrow(zδ)))
+    zsosΔ = transpose(mapreduce(z -> Zsos(z, μ, M), hcat, eachrow(zΔ)))
+
+    m = size(δ, 1)
+    nz = size(zδ, 2)
+
+    D = λ -> sum([ϕE(x, λ) for x in eachrow(zsosδ)] / 2)
+    cΔ = λ -> volume(ϵ) / b * sum([exp.(-ϕE(δ, λ) / 2) for δ in eachrow(zsosΔ)])
+
+    function f(λ...)
+        return -1 * (-m * log(cΔ(λ)) - D(λ))
+    end
+
+    nz = size(zδ, 2)
+
+    model = Model(NLopt.Optimizer)
+    set_optimizer_attribute(model, "algorithm", NLopt.LD_SLSQP)
+
+    @variable(model, λ[1:nz] >= 0.0)
+
+    register(model, :f, nz, f; autodiff=true)
+    @NLobjective(model, Min, f(λ...))
+
+    JuMP.optimize!(model)
+
+    lb = vec(minimum(δ; dims=1))
+    ub = vec(maximum(δ; dims=1))
+
+    Δ = IntervalBox(interval.(lb, ub)...)
+
+    cΔ = volume(ϵ) / b * sum([exp(-ϕE(δ, value.(λ)) / 2) for δ in eachrow(zsosΔ)])
+    return SlicedNormal(d, value.(λ), μ, M, Δ, cΔ), -objective_value(model)
+end
+
+function pdf(sn::SlicedNormal, δ::AbstractVector)
+    if δ ∈ sn.Δ
+        z = Zsos(Z(δ, sn.d), sn)
+        return exp(-ϕE(z, sn.λ) / 2) / sn.c
     else
         return 0
     end
@@ -50,14 +90,20 @@ end
 
 function Z(δ::AbstractVector, d::Integer)
     x = @polyvar x[1:length(δ)]
-    z = monomials(x..., 1:d)
+    z = mapreduce(p -> monomials(x..., p), vcat, 1:d)
 
     # double reverse to achieve graded lexographic order
-    return reverse(map(p -> p(reverse(δ)), z))
+    return map(p -> p(δ), z)
 end
 
-@memoize function c(
-    μ::AbstractVector, P::AbstractPDMat, d::Integer, x::AbstractMatrix, b::Integer=10000
+function Zsos(z::AbstractVector, μ::AbstractVector, M::AbstractMatrix)
+    return (M * (z - μ)) .^ 2
+end
+
+Zsos(z::AbstractVector, sn::SlicedNormal) = Zsos(z, sn.μ, sn.M)
+
+function c(
+    μ::AbstractVector, P::AbstractMatrix, d::Integer, x::AbstractMatrix, b::Integer=10000
 )
     ϵ = minimum_volume_ellipsoid(x')
 
@@ -74,69 +120,11 @@ function bounds(Δ::IntervalBox)
     return lb, ub
 end
 
-function mean_and_covariance(x::AbstractMatrix, d::Integer)
-    z = mapreduce(r -> transpose(Z(r, d)), vcat, eachrow(x))
-
+function mean_and_covariance(z::AbstractMatrix)
     μ = vec(mean(z; dims=1))
-    P = PDMat(inv(cov(LinearShrinkage(ConstantCorrelation()), z)))
+    P = inv(cov(LinearShrinkage(ConstantCorrelation()), z))
 
     return μ, P
-end
-
-function fit_baseline(x::AbstractMatrix, d::Integer)
-    lb = vec(minimum(x; dims=1))
-    ub = vec(maximum(x; dims=1))
-
-    Δ = IntervalBox(interval.(lb, ub)...)
-
-    return fit_baseline(x, d, Δ)
-end
-
-function fit_baseline(x::AbstractMatrix, d::Integer, Δ::IntervalBox)
-    μ, P = mean_and_covariance(x, d)
-    D = sum([_ϕ(δ, μ, P, d) for δ in eachrow(x)])
-
-    m = size(x, 1)
-
-    cΔ = c(μ, P, d, x)
-    lh = m * log(1 / cΔ) - D
-
-    return SlicedNormal(d, μ, P, Δ, x), lh
-end
-
-function fit_scaling(x::AbstractMatrix, d::Integer)
-    lb = vec(minimum(x; dims=1))
-    ub = vec(maximum(x; dims=1))
-
-    Δ = IntervalBox(interval.(lb, ub)...)
-
-    return fit_scaling(x, d, Δ)
-end
-
-function fit_scaling(x::AbstractMatrix, d::Integer, Δ::IntervalBox, b::Integer=10000)
-    μ, P = mean_and_covariance(x, d)
-
-    D = sum([_ϕ(δ, μ, P, d) for δ in eachrow(x)])
-
-    m = size(x, 1)
-
-    ϵ = minimum_volume_ellipsoid(x')
-
-    U = rand(ϵ, b)
-    V = volume(ϵ)
-
-    opt = Opt(:LN_NELDERMEAD, 1)
-    opt.lower_bounds = [0.0]
-    opt.xtol_rel = 1e-5
-    opt.min_objective =
-        (s, _) -> begin
-            cΔ = V / b * sum([exp(-_ϕ(δ, μ, s[1] * P, d)) for δ in eachcol(U)])
-            lh = m * log(1 / cΔ) - s[1] * D
-            return -1 * lh
-        end
-
-    (lh, factor, _) = optimize(opt, [1.0])
-    return SlicedNormal(d, μ, factor[1] * P, Δ, x), -1 * lh
 end
 
 function rand(sn::SlicedNormal, n::Integer)
@@ -146,16 +134,15 @@ function rand(sn::SlicedNormal, n::Integer)
 
     logprior(x) = sum(logpdf.(prior, x))
     sampler(n) = mapreduce(u -> rand(u, n), hcat, prior)
-    loglikelihood(x) = log(SlicedNormals.pdf(sn, x, false))
+    loglikelihood(x) = log(SlicedNormals.pdf(sn, x))
 
     samples, _ = tmcmc(loglikelihood, logprior, sampler, n)
 
     return samples
 end
 
-function _ϕ(δ, μ, P, d)
-    z = Z(δ, d)
-    return ((z - μ)' * P * (z - μ)) / 2
+function ϕE(z, λ)
+    return dot(λ, z)
 end
 
 end # module

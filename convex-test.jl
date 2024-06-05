@@ -6,6 +6,9 @@ using Plots
 using SlicedNormals
 using MinimumVolumeEllipsoids
 using LinearAlgebra
+using IntervalArithmetic
+
+using QuasiMonteCarlo
 
 n = 500
 
@@ -37,25 +40,24 @@ idx = δ1 .< 0
 d = 3 # degree
 b = 10000 # number of points to use  for estimation of the normalisation constant
 
-ϵ = minimum_volume_ellipsoid(δ')
-s = rand(ϵ, b)
+lb = vec(minimum(δ; dims=1))
+ub = vec(maximum(δ; dims=1))
 
-zδ = mapreduce(r -> transpose(SlicedNormals.Z(r, d)), vcat, eachrow(δ))
-zΔ = mapreduce(r -> transpose(SlicedNormals.Z(r, d)), vcat, eachcol(s))
+s = QuasiMonteCarlo.sample(b, lb, ub, SobolSample())
+
+zδ = mapreduce(r -> transpose(SlicedNormals.Z(r, 2d)), vcat, eachrow(δ))
+zΔ = mapreduce(r -> transpose(SlicedNormals.Z(r, 2d)), vcat, eachcol(s))
 
 μ, P = SlicedNormals.mean_and_covariance(zδ)
 
 M = cholesky(P).U
 
-zsosδ = transpose(mapreduce(z -> SlicedNormals.Zsos(z, μ, M), hcat, eachrow(zδ)))
-zsosΔ = transpose(mapreduce(z -> SlicedNormals.Zsos(z, μ, M), hcat, eachrow(zΔ)))
+zsosδ = Matrix(transpose(mapreduce(z -> SlicedNormals.Zsos(z, μ, M), hcat, eachrow(zδ))))
+zsosΔ = Matrix(transpose(mapreduce(z -> SlicedNormals.Zsos(z, μ, M), hcat, eachrow(zΔ))))
 
-m = size(δ, 1)
-n = size(zδ, 1)
+n = size(δ, 1)
 
-@show m, n
-
-vol_m = log(volume(ϵ) / b)
+vol_m = log(prod(ub - lb) / b)
 
 nz = size(zδ, 2)
 
@@ -65,7 +67,9 @@ l = Variable(nz)
 
 con = l >= 0
 problem = minimize(
-    n * (vol_m + logsumexp((Matrix(zsosΔ) * l) / -2)) + sum(Matrix(zsosδ) * l) / 2, con
+    n * (vol_m + logsumexp((zsosΔ * l) / -2)) +
+    sum([sum(x .* l) for x in eachrow(zsosδ)]) / 2,
+    con,
 )
 
 solve!(problem, SCS.Optimizer)
@@ -75,3 +79,41 @@ solve!(problem, SCS.Optimizer)
 @show problem.optval
 
 @show Convex.evaluate(l)
+
+Δ = IntervalBox(interval.(lb, ub)...)
+
+cΔ = prod(ub - lb) / b + sum(exp.(zsosΔ * Convex.evaluate(l) / -2))
+
+sn = SlicedNormal(d, Convex.evaluate(l), μ, M, Δ, cΔ)
+
+samples = rand(sn, 1000)
+
+p = scatter(
+    δ[:, 1], δ[:, 2]; aspect_ratio=:equal, lims=[-4, 4], xlab="δ1", ylab="δ2", label="data"
+)
+scatter!(p, samples[:, 1], samples[:, 2]; label="samples")
+
+display(p)
+
+# Plot density
+xs = range(-4, 4; length=200)
+ys = range(-4, 4; length=200)
+
+contour!(xs, ys, (x, y) -> SlicedNormals.pdf(sn, [x, y]))
+
+# sn_jump, _ = SlicedNormal(δ, d, b)
+
+# samples_jump = rand(sn_jump, 1000)
+
+# p = scatter(
+#     δ[:, 1], δ[:, 2]; aspect_ratio=:equal, lims=[-4, 4], xlab="δ1", ylab="δ2", label="data"
+# )
+# scatter!(p, samples_jump[:, 1], samples_jump[:, 2]; label="samples")
+
+# display(p)
+
+# # Plot density
+# xs = range(-4, 4; length=200)
+# ys = range(-4, 4; length=200)
+
+# contour!(xs, ys, (x, y) -> SlicedNormals.pdf(sn_jump, [x, y]))

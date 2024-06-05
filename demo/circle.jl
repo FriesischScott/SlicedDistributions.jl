@@ -29,11 +29,11 @@ idx = δ1 .< 0
 δ = vcat(δ, [δ1 δ2] .* -1)
 
 # Fit Sliced Normal Distribution
-d = 5
+d = 3
 b = 10000
 
 # Use baseline fit
-sn, lh = SlicedNormal(δ, d, b)
+@time sn, lh = SlicedNormal(δ, d, b)
 
 println("Likelihood: $lh")
 

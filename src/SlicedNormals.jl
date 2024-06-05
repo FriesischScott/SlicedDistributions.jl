@@ -9,6 +9,7 @@ using LinearAlgebra
 using MinimumVolumeEllipsoids
 using NLopt
 using TransitionalMCMC
+using QuasiMonteCarlo
 
 import Base: rand
 
@@ -27,8 +28,8 @@ function SlicedNormal(δ::AbstractMatrix, d::Integer, b::Integer=10000)
     ϵ = minimum_volume_ellipsoid(δ')
     s = rand(ϵ, b)
 
-    zδ = mapreduce(r -> transpose(Z(r, d)), vcat, eachrow(δ))
-    zΔ = mapreduce(r -> transpose(Z(r, d)), vcat, eachcol(s))
+    zδ = mapreduce(r -> transpose(Z(r, 2d)), vcat, eachrow(δ))
+    zΔ = mapreduce(r -> transpose(Z(r, 2d)), vcat, eachcol(s))
 
     μ, P = mean_and_covariance(zδ)
 
@@ -37,14 +38,14 @@ function SlicedNormal(δ::AbstractMatrix, d::Integer, b::Integer=10000)
     zsosδ = transpose(mapreduce(z -> Zsos(z, μ, M), hcat, eachrow(zδ)))
     zsosΔ = transpose(mapreduce(z -> Zsos(z, μ, M), hcat, eachrow(zΔ)))
 
-    m = size(δ, 1)
+    n = size(δ, 1)
     nz = size(zδ, 2)
 
-    D = λ -> sum([ϕE(x, λ) for x in eachrow(zsosδ)] / 2)
-    cΔ = λ -> volume(ϵ) / b * sum([exp.(-ϕE(δ, λ) / 2) for δ in eachrow(zsosΔ)])
+    D = λ -> sum([ϕE(x, λ) for x in eachrow(zsosδ)]) / 2
+    cΔ = λ -> volume(ϵ) / b * sum([exp.(ϕE(δ, λ) / -2) for δ in eachrow(zsosΔ)])
 
     function f(λ...)
-        return -1 * (-m * log(cΔ(λ)) - D(λ))
+        return n * log(cΔ(λ)) + D(λ)
     end
 
     nz = size(zδ, 2)
@@ -65,12 +66,12 @@ function SlicedNormal(δ::AbstractMatrix, d::Integer, b::Integer=10000)
     Δ = IntervalBox(interval.(lb, ub)...)
 
     cΔ = volume(ϵ) / b * sum([exp(-ϕE(δ, value.(λ)) / 2) for δ in eachrow(zsosΔ)])
-    return SlicedNormal(d, value.(λ), μ, M, Δ, cΔ), -objective_value(model)
+    return SlicedNormal(d, value.(λ), μ, M, Δ, cΔ), objective_value(model)
 end
 
 function pdf(sn::SlicedNormal, δ::AbstractVector)
     if δ ∈ sn.Δ
-        z = Zsos(Z(δ, sn.d), sn)
+        z = Zsos(Z(δ, sn.d * 2), sn)
         return exp(-ϕE(z, sn.λ) / 2) / sn.c
     else
         return 0

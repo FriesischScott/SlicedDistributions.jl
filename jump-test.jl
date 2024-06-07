@@ -1,10 +1,9 @@
 # Make the Convex.jl module available
-using Convex, SCS, MosekTools, Clarabel
+using JuMP, NLopt
 
 using Distributions
 using Plots
 using SlicedNormals
-using MinimumVolumeEllipsoids
 using LinearAlgebra
 using IntervalArithmetic
 
@@ -63,24 +62,38 @@ n = size(δ, 1)
 
 nz = size(zδ, 2)
 
-l = Variable(nz)
+model = Model(NLopt.Optimizer)
+set_optimizer_attribute(model, "algorithm", NLopt.LD_SLSQP)
 
-con = l >= 0
-problem = minimize(
-    n * (log(prod(ub - lb) / b) + logsumexp((zsosΔ * l) / -2)) + sum(zsosδ * l) / 2, con
-)
+@variable(model, λ[1:nz] >= 0.0)
 
-solve!(problem, Mosek.Optimizer)
+function f(λ...)
+    return n *
+           log(prod(ub - lb) / b * sum(exp.([dot(x, λ) for x in eachrow(zsosΔ)] ./ -2))) +
+           sum([dot(x, λ) for x in eachrow(zsosδ)]) / 2
+end
 
-@show problem.status
+function ∇f(g::AbstractVector, λ...)
+    for i in eachindex(g)
+        g[i] =
+            n *
+            sum([exp(-0.5 * dot(x, λ)) * x[i] for x in eachrow(zsosΔ)]) *
+            sum(exp.([dot(x, λ) for x in eachrow(zsosΔ)] ./ -2)) + 0.5 * sum(zsosδ[:, i])
+    end
+    return nothing
+end
 
-@show problem.optval
+register(model, :f, nz, f; autodiff=true)
+# register(model, :f, nz, f, ∇f)
+@NLobjective(model, Min, f(λ...))
 
-@show Convex.evaluate(l)
+JuMP.optimize!(model)
+
+@show objective_value(model)
+
+@show value.(λ)
 
 Δ = IntervalBox(interval.(lb, ub)...)
-
-cΔ = prod(ub - lb) / b + sum(exp.(zsosΔ * Convex.evaluate(l) / -2))
 
 sn = SlicedNormal(d, Convex.evaluate(l), μ, M, Δ, cΔ)
 

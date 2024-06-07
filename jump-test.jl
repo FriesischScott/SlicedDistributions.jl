@@ -76,9 +76,8 @@ end
 function ∇f(g::AbstractVector, λ...)
     for i in eachindex(g)
         g[i] =
-            n *
-            sum([exp(-0.5 * dot(x, λ)) * x[i] for x in eachrow(zsosΔ)]) *
-            sum(exp.([dot(x, λ) for x in eachrow(zsosΔ)] ./ -2)) + 0.5 * sum(zsosδ[:, i])
+            n * sum([exp(-0.5 * dot(x, λ)) * -0.5x[i] for x in eachrow(zsosΔ)]) / sum(exp.([dot(x, λ) for x in eachrow(zsosΔ)] ./ -2)) +
+            0.5 * sum(zsosδ[:, i])
     end
     return nothing
 end

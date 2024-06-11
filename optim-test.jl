@@ -78,15 +78,17 @@ function ∇f(g, λ)
 end
 
 function h!(H, λ)
+    sum_exp_feature = sum(exp.(zsosΔ * λ / -2))
+    sum_exp_feature_squared = sum_exp_feature^2
     for i in eachindex(λ)
         for j in eachindex(λ)
             H[i, j] =
                 n * (
                     sum([
                         exp(-0.5 * dot(x, λ)) * -0.5x[i] * -0.5x[j] for x in eachrow(zsosΔ)
-                    ]) * sum(exp.([dot(x, λ) for x in eachrow(zsosΔ)] ./ -2)) -
+                    ]) * sum_exp_feature -
                     sum([exp(-0.5 * dot(x, λ)) * -0.5x[i] for x in eachrow(zsosΔ)]) * sum([exp(-0.5 * dot(x, λ)) * -0.5x[j] for x in eachrow(zsosΔ)])
-                ) / sum(exp.([dot(x, λ) for x in eachrow(zsosΔ)] ./ -2))^2
+                ) / sum_exp_feature_squared
         end
     end
     return nothing
@@ -94,7 +96,7 @@ end
 
 # result = Optim.optimize(f, ∇f, zeros(nz), fill(Inf, nz), ones(nz), Fminbox(LBFGS()))
 
-@profview result = Optim.optimize(
+result = Optim.optimize(
     TwiceDifferentiable(f, ∇f, h!, ones(nz)),
     TwiceDifferentiableConstraints(zeros(nz), fill(Inf, nz)),
     ones(nz),
@@ -119,24 +121,7 @@ scatter!(p, samples[:, 1], samples[:, 2]; label="samples")
 display(p)
 
 # Plot density
-xs = range(-4, 4; length=200)
-ys = range(-4, 4; length=200)
+xs = range(-4, 4; length=1000)
+ys = range(-4, 4; length=1000)
 
 contour!(xs, ys, (x, y) -> SlicedNormals.pdf(sn, [x, y]))
-
-sn_jump, _ = SlicedNormal(δ, d, b)
-
-samples_jump = rand(sn_jump, 1000)
-
-p = scatter(
-    δ[:, 1], δ[:, 2]; aspect_ratio=:equal, lims=[-4, 4], xlab="δ1", ylab="δ2", label="data"
-)
-scatter!(p, samples_jump[:, 1], samples_jump[:, 2]; label="samples")
-
-display(p)
-
-# Plot density
-xs = range(-4, 4; length=200)
-ys = range(-4, 4; length=200)
-
-contour!(xs, ys, (x, y) -> SlicedNormals.pdf(sn_jump, [x, y]))

@@ -1,5 +1,5 @@
 # Make the Convex.jl module available
-using JuMP, NLopt
+using JuMP, Ipopt
 
 using Distributions
 using Plots
@@ -62,63 +62,32 @@ n = size(δ, 1)
 
 nz = size(zδ, 2)
 
-model = Model(NLopt.Optimizer)
-set_optimizer_attribute(model, "algorithm", NLopt.LD_SLSQP)
+model = Model(Ipopt.Optimizer)
 
-@variable(model, λ[1:nz] >= 0.0)
+@variable(model, λ[i=1:nz] .>= 0)
 
-function f(λ...)
-    return n *
-           log(prod(ub - lb) / b * sum(exp.([dot(x, λ) for x in eachrow(zsosΔ)] ./ -2))) +
-           sum([dot(x, λ) for x in eachrow(zsosδ)]) / 2
-end
+@objective(
+    model, Min, n * log(prod(ub - lb) / b * sum(exp.(zsosΔ * λ / -2))) + sum(zsosδ * λ) / 2
+)
 
-function ∇f(g::AbstractVector, λ...)
-    for i in eachindex(g)
-        g[i] =
-            n * sum([exp(-0.5 * dot(x, λ)) * -0.5x[i] for x in eachrow(zsosΔ)]) / sum(exp.([dot(x, λ) for x in eachrow(zsosΔ)] ./ -2)) +
-            0.5 * sum(zsosδ[:, i])
-    end
-    return nothing
-end
-
-register(model, :f, nz, f; autodiff=true)
-# register(model, :f, nz, f, ∇f)
-@NLobjective(model, Min, f(λ...))
-
-JuMP.optimize!(model)
+optimize!(model)
 
 @show objective_value(model)
 
 @show value.(λ)
 
-Δ = IntervalBox(interval.(lb, ub)...)
+# cΔ = b * (log(prod(ub - lb) / b) + log(sum(exp.(zsosΔ * value.(λ) / -2))))
 
-sn = SlicedNormal(d, Convex.evaluate(l), μ, M, Δ, cΔ)
+# Δ = IntervalBox(interval.(lb, ub)...)
 
-samples = rand(sn, 1000)
+# sn = SlicedNormal(d, value.(λ), μ, M, Δ, cΔ)
 
-p = scatter(
-    δ[:, 1], δ[:, 2]; aspect_ratio=:equal, lims=[-4, 4], xlab="δ1", ylab="δ2", label="data"
-)
-scatter!(p, samples[:, 1], samples[:, 2]; label="samples")
-
-display(p)
-
-# Plot density
-xs = range(-4, 4; length=200)
-ys = range(-4, 4; length=200)
-
-contour!(xs, ys, (x, y) -> SlicedNormals.pdf(sn, [x, y]))
-
-# sn_jump, _ = SlicedNormal(δ, d, b)
-
-# samples_jump = rand(sn_jump, 1000)
+# samples = rand(sn, 1000)
 
 # p = scatter(
 #     δ[:, 1], δ[:, 2]; aspect_ratio=:equal, lims=[-4, 4], xlab="δ1", ylab="δ2", label="data"
 # )
-# scatter!(p, samples_jump[:, 1], samples_jump[:, 2]; label="samples")
+# scatter!(p, samples[:, 1], samples[:, 2]; label="samples")
 
 # display(p)
 
@@ -126,4 +95,4 @@ contour!(xs, ys, (x, y) -> SlicedNormals.pdf(sn, [x, y]))
 # xs = range(-4, 4; length=200)
 # ys = range(-4, 4; length=200)
 
-# contour!(xs, ys, (x, y) -> SlicedNormals.pdf(sn_jump, [x, y]))
+# contour!(xs, ys, (x, y) -> SlicedNormals.pdf(sn, [x, y]))

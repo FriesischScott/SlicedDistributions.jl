@@ -103,25 +103,31 @@ result = Optim.optimize(
     IPNewton(),
 )
 
-Δ = IntervalBox(interval.(lb, ub)...)
+@show result.minimum
 
-cΔ = log(
-    prod(ub - lb) / b * sum(exp.([dot(x, result.minimizer) for x in eachrow(zsosΔ)] ./ -2))
-)
+@show result.minimizer
 
-sn = SlicedNormal(d, result.minimizer, μ, M, Δ, cΔ)
+# Δ = IntervalBox(interval.(lb, ub)...)
 
-samples = rand(sn, 1000)
+# cΔ =
+#     n * log(
+#         prod(ub - lb) / b *
+#         sum(exp.([dot(x, result.minimizer) for x in eachrow(zsosΔ)] ./ -2)),
+#     )
 
-p = scatter(
-    δ[:, 1], δ[:, 2]; aspect_ratio=:equal, lims=[-4, 4], xlab="δ1", ylab="δ2", label="data"
-)
-scatter!(p, samples[:, 1], samples[:, 2]; label="samples")
+# sn = SlicedNormal(d, result.minimizer, μ, M, Δ, cΔ)
 
-display(p)
+# samples = rand(sn, 1000)
 
-# Plot density
-xs = range(-4, 4; length=1000)
-ys = range(-4, 4; length=1000)
+# p = scatter(
+#     δ[:, 1], δ[:, 2]; aspect_ratio=:equal, lims=[-4, 4], xlab="δ1", ylab="δ2", label="data"
+# )
+# scatter!(p, samples[:, 1], samples[:, 2]; label="samples")
 
-contour!(xs, ys, (x, y) -> SlicedNormals.pdf(sn, [x, y]))
+# display(p)
+
+# # Plot density
+# xs = range(-4, 4; length=1000)
+# ys = range(-4, 4; length=1000)
+
+# contour!(xs, ys, (x, y) -> SlicedNormals.pdf(sn, [x, y]))

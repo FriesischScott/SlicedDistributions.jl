@@ -63,45 +63,38 @@ n = size(δ, 1)
 nz = size(zδ, 2)
 
 function f(λ)
-    return n *
-           log(prod(ub - lb) / b * sum(exp.([dot(x, λ) for x in eachrow(zsosΔ)] ./ -2))) +
-           sum([dot(x, λ) for x in eachrow(zsosδ)]) / 2
+    return n * log(prod(ub - lb) / b * sum(exp.(zsosΔ * λ / -2))) + sum(zsosδ * λ) / 2
 end
 
-function ∇f(g, λ)
-    for i in eachindex(g)
-        g[i] =
-            n * sum([exp(-0.5 * dot(x, λ)) * -0.5x[i] for x in eachrow(zsosΔ)]) / sum(exp.([dot(x, λ) for x in eachrow(zsosΔ)] ./ -2)) +
-            0.5 * sum(zsosδ[:, i])
+function ∇f!(g, λ)
+    exp_Δ = exp.(zsosΔ * λ / -2)
+    sum_exp_Δ = sum(exp_Δ)
+        g[i] = @views n * sum(exp_Δ .* -0.5zsosΔ[:, i]) / sum_exp_Δ + sum(zsosδ[:, i]) / 2
     end
     return nothing
 end
 
-function h!(H, λ)
-    sum_exp_feature = sum(exp.(zsosΔ * λ / -2))
-    sum_exp_feature_squared = sum_exp_feature^2
-    for i in eachindex(λ)
-        for j in eachindex(λ)
+function ∇²f!(H, λ)
+    exp_Δ = exp.(zsosΔ * λ / -2)
+    sum_exp_Δ = sum(exp_Δ)
+    sum_exp_Δ² = sum_exp_Δ^2
+
+    for (i, Δ_i) in enumerate(eachcol(zsosΔ))
+        exp_Δ_i = exp_Δ .* -0.5Δ_i
+        sum_exp_Δ_i = sum(exp_Δ_i)
+
+        for (j, Δ_j) in enumerate(eachcol(zsosΔ))
             H[i, j] =
                 n * (
-                    sum([
-                        exp(-0.5 * dot(x, λ)) * -0.5x[i] * -0.5x[j] for x in eachrow(zsosΔ)
-                    ]) * sum_exp_feature -
-                    sum([exp(-0.5 * dot(x, λ)) * -0.5x[i] for x in eachrow(zsosΔ)]) * sum([exp(-0.5 * dot(x, λ)) * -0.5x[j] for x in eachrow(zsosΔ)])
-                ) / sum_exp_feature_squared
+                    sum(exp_Δ_i .* -0.5Δ_j) * sum_exp_Δ -
+                    sum_exp_Δ_i * sum(exp_Δ .* -0.5Δ_j)
+                ) / sum_exp_Δ²
         end
     end
     return nothing
 end
 
-# result = Optim.optimize(f, ∇f, zeros(nz), fill(Inf, nz), ones(nz), Fminbox(LBFGS()))
-
-result = Optim.optimize(
-    TwiceDifferentiable(f, ∇f, h!, ones(nz)),
-    TwiceDifferentiableConstraints(zeros(nz), fill(Inf, nz)),
-    ones(nz),
-    IPNewton(),
-)
+result = Optim.optimize(f, ∇f!, ∇²f!, zeros(nz), fill(Inf, nz), ones(nz), IPNewton())
 
 @show result.minimum
 

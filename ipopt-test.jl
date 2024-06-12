@@ -64,6 +64,8 @@ nz = size(zδ, 2)
 
 model = Model(Ipopt.Optimizer)
 
+set_silent(model)
+
 @variable(model, λ[i=1:nz] .>= 0)
 
 @objective(

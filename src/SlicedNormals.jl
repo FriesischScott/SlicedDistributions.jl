@@ -4,12 +4,10 @@ using CovarianceEstimation
 using Distributions
 using DynamicPolynomials
 using IntervalArithmetic
-using JuMP
 using LinearAlgebra
-using MinimumVolumeEllipsoids
-using NLopt
 using TransitionalMCMC
 using QuasiMonteCarlo
+using Optim
 
 import Base: rand
 
@@ -25,8 +23,12 @@ struct SlicedNormal
 end
 
 function SlicedNormal(δ::AbstractMatrix, d::Integer, b::Integer=10000)
-    ϵ = minimum_volume_ellipsoid(δ')
-    s = rand(ϵ, b)
+    lb = vec(minimum(δ; dims=1))
+    ub = vec(maximum(δ; dims=1))
+
+    Δ = IntervalBox(interval.(lb, ub)...)
+
+    s = QuasiMonteCarlo.sample(b, lb, ub, SobolSample())
 
     zδ = mapreduce(r -> transpose(Z(r, 2d)), vcat, eachrow(δ))
     zΔ = mapreduce(r -> transpose(Z(r, 2d)), vcat, eachcol(s))
@@ -41,38 +43,52 @@ function SlicedNormal(δ::AbstractMatrix, d::Integer, b::Integer=10000)
     n = size(δ, 1)
     nz = size(zδ, 2)
 
-    D = λ -> sum([ϕE(x, λ) for x in eachrow(zsosδ)]) / 2
-    cΔ = λ -> volume(ϵ) / b * sum([exp.(ϕE(δ, λ) / -2) for δ in eachrow(zsosΔ)])
-
-    function f(λ...)
-        return n * log(cΔ(λ)) + D(λ)
+    function f(λ)
+        return n * log(prod(ub - lb) / b * sum(exp.(zsosΔ * λ / -2))) + sum(zsosδ * λ) / 2
     end
 
-    nz = size(zδ, 2)
+    function ∇f!(g, λ)
+        exp_Δ = exp.(zsosΔ * λ / -2)
+        sum_exp_Δ = sum(exp_Δ)
+        for i in eachindex(g)
+            g[i] = @views n * sum(exp_Δ .* -0.5zsosΔ[:, i]) / sum_exp_Δ +
+                sum(zsosδ[:, i]) / 2
+        end
+        return nothing
+    end
 
-    model = Model(NLopt.Optimizer)
-    set_optimizer_attribute(model, "algorithm", NLopt.LD_SLSQP)
+    function ∇²f!(H, λ)
+        exp_Δ = exp.(zsosΔ * λ / -2)
+        sum_exp_Δ = sum(exp_Δ)
+        sum_exp_Δ² = sum_exp_Δ^2
 
-    @variable(model, λ[1:nz] >= 0.0)
+        for (i, Δ_i) in enumerate(eachcol(zsosΔ))
+            exp_Δ_i = exp_Δ .* -0.5Δ_i
+            sum_exp_Δ_i = sum(exp_Δ_i)
 
-    register(model, :f, nz, f; autodiff=true)
-    @NLobjective(model, Min, f(λ...))
+            for (j, Δ_j) in enumerate(eachcol(zsosΔ))
+                H[i, j] =
+                    n * (
+                        sum(exp_Δ_i .* -0.5Δ_j) * sum_exp_Δ -
+                        sum_exp_Δ_i * sum(exp_Δ .* -0.5Δ_j)
+                    ) / sum_exp_Δ²
+            end
+        end
+        return nothing
+    end
 
-    JuMP.optimize!(model)
+    result = optimize(f, ∇f!, ∇²f!, zeros(nz), fill(Inf, nz), ones(nz), IPNewton())
 
-    lb = vec(minimum(δ; dims=1))
-    ub = vec(maximum(δ; dims=1))
+    cΔ = prod(ub - lb) / b * sum(exp.(zsosΔ * result.minimizer / -2))
 
-    Δ = IntervalBox(interval.(lb, ub)...)
-
-    cΔ = volume(ϵ) / b * sum([exp(-ϕE(δ, value.(λ)) / 2) for δ in eachrow(zsosΔ)])
-    return SlicedNormal(d, value.(λ), μ, M, Δ, cΔ), objective_value(model)
+    sn = SlicedNormal(d, result.minimizer, μ, M, Δ, cΔ)
+    return sn, -result.minimum
 end
 
 function pdf(sn::SlicedNormal, δ::AbstractVector)
     if δ ∈ sn.Δ
-        z = Zsos(Z(δ, sn.d * 2), sn)
-        return exp(-ϕE(z, sn.λ) / 2) / sn.c
+        z = Zsos(Z(δ, 2sn.d), sn)
+        return exp(-dot(z, sn.λ) / 2) / sn.c
     else
         return 0
     end
@@ -93,7 +109,6 @@ function Z(δ::AbstractVector, d::Integer)
     x = @polyvar x[1:length(δ)]
     z = mapreduce(p -> monomials(x..., p), vcat, 1:d)
 
-    # double reverse to achieve graded lexographic order
     return map(p -> p(δ), z)
 end
 
@@ -102,17 +117,6 @@ function Zsos(z::AbstractVector, μ::AbstractVector, M::AbstractMatrix)
 end
 
 Zsos(z::AbstractVector, sn::SlicedNormal) = Zsos(z, sn.μ, sn.M)
-
-function c(
-    μ::AbstractVector, P::AbstractMatrix, d::Integer, x::AbstractMatrix, b::Integer=10000
-)
-    ϵ = minimum_volume_ellipsoid(x')
-
-    V = volume(ϵ)
-    u = rand(ϵ, b)
-
-    return V / b * sum([exp(-_ϕ(δ, μ, P, d)) for δ in eachcol(u)])
-end
 
 function bounds(Δ::IntervalBox)
     lb = getfield.(Δ, :lo)
@@ -140,10 +144,6 @@ function rand(sn::SlicedNormal, n::Integer)
     samples, _ = tmcmc(loglikelihood, logprior, sampler, n)
 
     return samples
-end
-
-function ϕE(z, λ)
-    return dot(λ, z)
 end
 
 end # module

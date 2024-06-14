@@ -2,6 +2,10 @@ using Distributions
 using Plots
 using SlicedNormals
 
+using Random
+
+Random.seed!(8128)
+
 n = 500
 
 # Step 1
@@ -32,7 +36,6 @@ idx = δ1 .< 0
 d = 3
 b = 10000
 
-# Use baseline fit
 @time sn, lh = SlicedNormal(δ, d, b)
 
 println("Likelihood: $lh")

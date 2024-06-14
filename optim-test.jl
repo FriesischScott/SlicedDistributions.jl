@@ -69,6 +69,7 @@ end
 function ∇f!(g, λ)
     exp_Δ = exp.(zsosΔ * λ / -2)
     sum_exp_Δ = sum(exp_Δ)
+    for i in eachindex(g)
         g[i] = @views n * sum(exp_Δ .* -0.5zsosΔ[:, i]) / sum_exp_Δ + sum(zsosδ[:, i]) / 2
     end
     return nothing

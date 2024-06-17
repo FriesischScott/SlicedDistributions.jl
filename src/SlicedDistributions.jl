@@ -1,4 +1,4 @@
-module SlicedNormals
+module SlicedDistributions
 
 using CovarianceEstimation
 using Distributions
@@ -28,7 +28,7 @@ function SlicedNormal(δ::AbstractMatrix, d::Integer, b::Integer=10000)
 
     Δ = IntervalBox(interval.(lb, ub)...)
 
-    s = QuasiMonteCarlo.sample(b, lb, ub, SobolSample())
+    s = QuasiMonteCarlo.sample(b, lb, ub, HaltonSample())
 
     zδ = mapreduce(r -> transpose(Z(r, 2d)), vcat, eachrow(δ))
     zΔ = mapreduce(r -> transpose(Z(r, 2d)), vcat, eachcol(s))
@@ -139,11 +139,11 @@ function rand(sn::SlicedNormal, n::Integer)
 
     logprior(x) = sum(logpdf.(prior, x))
     sampler(n) = mapreduce(u -> rand(u, n), hcat, prior)
-    loglikelihood(x) = log(SlicedNormals.pdf(sn, x))
+    loglikelihood(x) = log(SlicedDistributions.pdf(sn, x))
 
     samples, _ = tmcmc(loglikelihood, logprior, sampler, n)
 
     return samples
 end
 
-end # module
+end

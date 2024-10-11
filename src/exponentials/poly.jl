@@ -13,8 +13,10 @@ function SlicedExponential(δ::AbstractMatrix, d::Integer, b::Integer=10000)
 
     s = QuasiMonteCarlo.sample(b, lb, ub, HaltonSample())
 
-    zδ = mapreduce(r -> transpose(Z(r, 2d)), vcat, eachrow(δ))
-    zΔ = mapreduce(r -> transpose(Z(r, 2d)), vcat, eachcol(s))
+    basis = monomials(["δ$i" for i in 1:size(δ, 2)], 2d, GradedLexicographicOrder())
+
+    zδ = transpose(basis(transpose(δ)))
+    zΔ = transpose(basis(s))
 
     n = size(δ, 1)
     nz = size(zδ, 2)

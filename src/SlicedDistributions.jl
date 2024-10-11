@@ -2,9 +2,9 @@ module SlicedDistributions
 
 using CovarianceEstimation
 using Distributions
-using DynamicPolynomials
 using IntervalArithmetic
 using LinearAlgebra
+using Monomials
 using TransitionalMCMC
 using QuasiMonteCarlo
 using Optim
@@ -41,10 +41,8 @@ function rand(sd::SlicedDistribution, n::Integer)
 end
 
 function Z(δ::AbstractVector, d::Integer)
-    x = @polyvar x[1:length(δ)]
-    z = mapreduce(p -> monomials(x..., p), vcat, 1:d)
-
-    return map(p -> p(δ), z)
+    basis = Monomials.monomials(["δ$i" for i in 1:length(δ)], d, GradedLexicographicOrder())
+    return basis(δ)
 end
 
 include("exponentials/poly.jl")

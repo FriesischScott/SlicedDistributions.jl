@@ -33,36 +33,9 @@ function SlicedNormal(δ::AbstractMatrix, d::Integer, b::Integer=10000)
 
     f = get_likelihood(zsosδ, zsosΔ, n, prod(ub - lb), b)
 
+    ∇f! = get_gradient(zsosδ, zsosΔ, n)
 
-    function ∇f!(g, λ)
-        exp_Δ = exp.(zsosΔ * λ / -2)
-        sum_exp_Δ = sum(exp_Δ)
-        for i in eachindex(g)
-            g[i] = @views n * sum(exp_Δ .* -0.5zsosΔ[:, i]) / sum_exp_Δ +
-                sum(zsosδ[:, i]) / 2
-        end
-        return nothing
-    end
-
-    function ∇²f!(H, λ)
-        exp_Δ = exp.(zsosΔ * λ / -2)
-        sum_exp_Δ = sum(exp_Δ)
-        sum_exp_Δ² = sum_exp_Δ^2
-
-        for (i, Δ_i) in enumerate(eachcol(zsosΔ))
-            exp_Δ_i = exp_Δ .* -0.5Δ_i
-            sum_exp_Δ_i = sum(exp_Δ_i)
-
-            for (j, Δ_j) in enumerate(eachcol(zsosΔ))
-                H[i, j] =
-                    n * (
-                        sum(exp_Δ_i .* -0.5Δ_j) * sum_exp_Δ -
-                        sum_exp_Δ_i * sum(exp_Δ .* -0.5Δ_j)
-                    ) / sum_exp_Δ²
-            end
-        end
-        return nothing
-    end
+    ∇²f! = get_hessian(zsosΔ, n)
 
     result = optimize(f, ∇f!, ∇²f!, zeros(nz), fill(Inf, nz), ones(nz), IPNewton())
 

@@ -24,34 +24,9 @@ function SlicedExponential(δ::AbstractMatrix, d::Integer, b::Integer=10000)
 
     f = get_likelihood(zδ, zΔ, n, prod(ub - lb), b)
 
-    function ∇f!(g, λ)
-        exp_Δ = exp.(zΔ * λ / -2)
-        sum_exp_Δ = sum(exp_Δ)
-        for i in eachindex(g)
-            g[i] = @views n * sum(exp_Δ .* -0.5zΔ[:, i]) / sum_exp_Δ + sum(zδ[:, i]) / 2
-        end
-        return nothing
-    end
+    ∇f! = get_gradient(zδ, zΔ, n)
 
-    function ∇²f!(H, λ)
-        exp_Δ = exp.(zΔ * λ / -2)
-        sum_exp_Δ = sum(exp_Δ)
-        sum_exp_Δ² = sum_exp_Δ^2
-
-        for (i, Δ_i) in enumerate(eachcol(zΔ))
-            exp_Δ_i = exp_Δ .* -0.5Δ_i
-            sum_exp_Δ_i = sum(exp_Δ_i)
-
-            for (j, Δ_j) in enumerate(eachcol(zΔ))
-                H[i, j] =
-                    n * (
-                        sum(exp_Δ_i .* -0.5Δ_j) * sum_exp_Δ -
-                        sum_exp_Δ_i * sum(exp_Δ .* -0.5Δ_j)
-                    ) / sum_exp_Δ²
-            end
-        end
-        return nothing
-    end
+    ∇²f! = get_hessian(zΔ, n)
 
     result = optimize(f, ∇f!, ∇²f!, ones(nz), Newton())
 

@@ -25,8 +25,8 @@ function SlicedNormal(δ::AbstractMatrix, d::Integer, b::Integer=10000)
 
     M = cholesky(P).U
 
-    zsosδ = transpose(mapreduce(z -> Zsos(z, μ, M), hcat, eachrow(zδ)))
-    zsosΔ = transpose(mapreduce(z -> Zsos(z, μ, M), hcat, eachrow(zΔ)))
+    zsosδ = permutedims(Zsos(zδ', μ, M))
+    zsosΔ = permutedims(Zsos(zΔ', μ, M))
 
     n = size(δ, 1)
     nz = size(zδ, 2)
@@ -84,6 +84,10 @@ end
 
 function Zsos(z::AbstractVector, μ::AbstractVector, M::AbstractMatrix)
     return (M * (z - μ)) .^ 2
+end
+
+function Zsos(z::AbstractMatrix, μ::AbstractVector, M::AbstractMatrix)
+    return (M * (z .- μ)).^2
 end
 
 Zsos(z::AbstractVector, sn::SlicedNormal) = Zsos(z, sn.μ, sn.M)

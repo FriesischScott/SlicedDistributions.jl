@@ -16,15 +16,13 @@ function SlicedExponential(δ::AbstractMatrix, d::Integer, b::Integer=10000)
 
     t = monomials(["δ$i" for i in 1:size(δ, 2)], 2d, GradedLexicographicOrder())
 
-    zδ = transpose(t(transpose(δ)))
-    zΔ = transpose(t(s))
+    zδ = permutedims(t(transpose(δ)))
+    zΔ = permutedims(t(s))
 
     n = size(δ, 1)
     nz = size(zδ, 2)
 
-    function f(λ)
-        return n * log(prod(ub - lb) / b * sum(exp.(zΔ * λ / -2))) + sum(zδ * λ) / 2
-    end
+    f = get_likelihood(zδ, zΔ, n, prod(ub - lb), b)
 
     function ∇f!(g, λ)
         exp_Δ = exp.(zΔ * λ / -2)

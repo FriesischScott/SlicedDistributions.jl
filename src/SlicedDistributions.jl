@@ -40,6 +40,11 @@ function rand(sd::SlicedDistribution, n::Integer)
     return samples
 end
 
+function get_likelihood(zδ::Matrix{<:Real}, zΔ::Matrix{<:Real}, n::Integer, vol::Real, b::Integer)
+    f = λ -> n * log(vol / b * sum(exp.(zΔ * λ / -2))) + sum(zδ * λ) / 2
+ return f
+end
+
 include("exponentials/poly.jl")
 include("normals/sum-of-squares.jl")
 

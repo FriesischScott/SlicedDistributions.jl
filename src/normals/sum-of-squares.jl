@@ -31,9 +31,8 @@ function SlicedNormal(δ::AbstractMatrix, d::Integer, b::Integer=10000)
     n = size(δ, 1)
     nz = size(zδ, 2)
 
-    function f(λ)
-        return n * log(prod(ub - lb) / b * sum(exp.(zsosΔ * λ / -2))) + sum(zsosδ * λ) / 2
-    end
+    f = get_likelihood(zsosδ, zsosΔ, n, prod(ub - lb), b)
+
 
     function ∇f!(g, λ)
         exp_Δ = exp.(zsosΔ * λ / -2)

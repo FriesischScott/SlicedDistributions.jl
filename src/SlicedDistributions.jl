@@ -40,11 +40,6 @@ function rand(sd::SlicedDistribution, n::Integer)
     return samples
 end
 
-function Z(δ::AbstractVector, d::Integer)
-    basis = Monomials.monomials(["δ$i" for i in 1:length(δ)], d, GradedLexicographicOrder())
-    return basis(δ)
-end
-
 include("exponentials/poly.jl")
 include("normals/sum-of-squares.jl")
 

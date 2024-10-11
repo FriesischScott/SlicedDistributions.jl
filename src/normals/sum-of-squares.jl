@@ -1,5 +1,6 @@
 struct SlicedNormal <: SlicedDistribution
     d::Integer
+    t::Vector{Monomial}
     λ::AbstractVector
     μ::AbstractVector
     M::AbstractMatrix
@@ -15,10 +16,10 @@ function SlicedNormal(δ::AbstractMatrix, d::Integer, b::Integer=10000)
 
     s = QuasiMonteCarlo.sample(b, lb, ub, HaltonSample())
 
-    basis = monomials(["δ$i" for i in 1:size(δ, 2)], 2d, GradedLexicographicOrder())
+    t = monomials(["δ$i" for i in 1:size(δ, 2)], 2d, GradedLexicographicOrder())
 
-    zδ = transpose(basis(transpose(δ)))
-    zΔ = transpose(basis(s))
+    zδ = transpose(t(transpose(δ)))
+    zΔ = transpose(t(s))
 
     μ, P = mean_and_covariance(zδ)
 
@@ -68,13 +69,13 @@ function SlicedNormal(δ::AbstractMatrix, d::Integer, b::Integer=10000)
 
     cΔ = prod(ub - lb) / b * sum(exp.(zsosΔ * result.minimizer / -2))
 
-    sn = SlicedNormal(d, result.minimizer, μ, M, Δ, cΔ)
+    sn = SlicedNormal(d, t, result.minimizer, μ, M, Δ, cΔ)
     return sn, -result.minimum
 end
 
 function pdf(sn::SlicedNormal, δ::AbstractVector)
     if δ ∈ sn.Δ
-        z = Zsos(Z(δ, 2sn.d), sn)
+        z = Zsos(sn.t(δ), sn)
         return exp(-dot(z, sn.λ) / 2) / sn.c
     else
         return 0

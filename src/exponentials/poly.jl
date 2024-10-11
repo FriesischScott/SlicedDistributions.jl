@@ -1,5 +1,6 @@
 struct SlicedExponential <: SlicedDistribution
     d::Integer
+    t::Vector{Monomial}
     λ::AbstractVector
     Δ::IntervalBox
     c::Float64
@@ -13,10 +14,10 @@ function SlicedExponential(δ::AbstractMatrix, d::Integer, b::Integer=10000)
 
     s = QuasiMonteCarlo.sample(b, lb, ub, HaltonSample())
 
-    basis = monomials(["δ$i" for i in 1:size(δ, 2)], 2d, GradedLexicographicOrder())
+    t = monomials(["δ$i" for i in 1:size(δ, 2)], 2d, GradedLexicographicOrder())
 
-    zδ = transpose(basis(transpose(δ)))
-    zΔ = transpose(basis(s))
+    zδ = transpose(t(transpose(δ)))
+    zΔ = transpose(t(s))
 
     n = size(δ, 1)
     nz = size(zδ, 2)
@@ -58,14 +59,13 @@ function SlicedExponential(δ::AbstractMatrix, d::Integer, b::Integer=10000)
 
     cΔ = prod(ub - lb) / b * sum(exp.(zΔ * result.minimizer / -2))
 
-    sn = SlicedExponential(d, result.minimizer, Δ, cΔ)
+    sn = SlicedExponential(d, t, result.minimizer, Δ, cΔ)
     return sn, -result.minimum
 end
 
 function pdf(sn::SlicedExponential, δ::AbstractVector)
     if δ ∈ sn.Δ
-        z = Z(δ, 2sn.d)
-        return exp(-dot(z, sn.λ) / 2) / sn.c
+        return exp(-dot(sn.t(δ), sn.λ) / 2) / sn.c
     else
         return 0
     end

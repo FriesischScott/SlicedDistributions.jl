@@ -4,15 +4,14 @@ struct SlicedNormal <: SlicedDistribution
     λ::AbstractVector
     μ::AbstractVector
     M::AbstractMatrix
-    Δ::IntervalBox
+    lb::AbstractVector{<:Real}
+    ub::AbstractVector{<:Real}
     c::Float64
 end
 
 function SlicedNormal(δ::AbstractMatrix, d::Integer, b::Integer=10000)
     lb = vec(minimum(δ; dims=1))
     ub = vec(maximum(δ; dims=1))
-
-    Δ = IntervalBox(interval.(lb, ub)...)
 
     s = QuasiMonteCarlo.sample(b, lb, ub, HaltonSample())
 
@@ -41,12 +40,12 @@ function SlicedNormal(δ::AbstractMatrix, d::Integer, b::Integer=10000)
 
     cΔ = prod(ub - lb) / b * sum(exp.(zsosΔ * result.minimizer / -2))
 
-    sn = SlicedNormal(d, t, result.minimizer, μ, M, Δ, cΔ)
+    sn = SlicedNormal(d, t, result.minimizer, μ, M, lb, ub, cΔ)
     return sn, -result.minimum
 end
 
 function pdf(sn::SlicedNormal, δ::AbstractVector)
-    if δ ∈ sn.Δ
+    if all(sn.lb .<= δ .<= sn.ub)
         z = Zsos(sn.t(δ), sn)
         return exp(-dot(z, sn.λ) / 2) / sn.c
     else
@@ -59,7 +58,7 @@ function Zsos(z::AbstractVector, μ::AbstractVector, M::AbstractMatrix)
 end
 
 function Zsos(z::AbstractMatrix, μ::AbstractVector, M::AbstractMatrix)
-    return (M * (z .- μ)).^2
+    return (M * (z .- μ)) .^ 2
 end
 
 Zsos(z::AbstractVector, sn::SlicedNormal) = Zsos(z, sn.μ, sn.M)

@@ -2,15 +2,14 @@ struct SlicedExponential <: SlicedDistribution
     d::Integer
     t::Vector{Monomial}
     λ::AbstractVector
-    Δ::IntervalBox
+    lb::AbstractVector{<:Real}
+    ub::AbstractVector{<:Real}
     c::Float64
 end
 
 function SlicedExponential(δ::AbstractMatrix, d::Integer, b::Integer=10000)
     lb = vec(minimum(δ; dims=1))
     ub = vec(maximum(δ; dims=1))
-
-    Δ = IntervalBox(interval.(lb, ub)...)
 
     s = QuasiMonteCarlo.sample(b, lb, ub, HaltonSample())
 
@@ -32,12 +31,12 @@ function SlicedExponential(δ::AbstractMatrix, d::Integer, b::Integer=10000)
 
     cΔ = prod(ub - lb) / b * sum(exp.(zΔ * result.minimizer / -2))
 
-    sn = SlicedExponential(d, t, result.minimizer, Δ, cΔ)
+    sn = SlicedExponential(d, t, result.minimizer, lb, ub, cΔ)
     return sn, -result.minimum
 end
 
 function pdf(sn::SlicedExponential, δ::AbstractVector)
-    if δ ∈ sn.Δ
+    if all(sn.lb .<= δ .<= sn.ub)
         return exp(-dot(sn.t(δ), sn.λ) / 2) / sn.c
     else
         return 0

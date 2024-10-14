@@ -2,7 +2,6 @@ module SlicedDistributions
 
 using CovarianceEstimation
 using Distributions
-using IntervalArithmetic
 using LinearAlgebra
 using Monomials
 using TransitionalMCMC

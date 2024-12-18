@@ -64,11 +64,12 @@ function get_hessian(zΔ::Matrix{<:Real}, n::Integer)
             sum_exp_Δ = sum(exp_Δ)
             sum_exp_Δ² = sum_exp_Δ^2
 
-            for (i, Δ_i) in enumerate(eachcol(zΔ))
-                exp_Δ_i = exp_Δ .* -0.5Δ_i
+            for i in axes(zΔ, 2)
+                exp_Δ_i = exp_Δ .* -0.5zΔ[:, i]
                 sum_exp_Δ_i = sum(exp_Δ_i)
 
-                for (j, Δ_j) in enumerate(eachcol(zΔ))
+                for j in i:size(zΔ, 2)
+                    Δ_j = @view zΔ[:, j]
                     H[i, j] =
                         n * (
                             sum(exp_Δ_i .* -0.5Δ_j) * sum_exp_Δ -
@@ -76,6 +77,8 @@ function get_hessian(zΔ::Matrix{<:Real}, n::Integer)
                         ) / sum_exp_Δ²
                 end
             end
+
+            H[:] = Symmetric(H)
             return nothing
         end
     return f

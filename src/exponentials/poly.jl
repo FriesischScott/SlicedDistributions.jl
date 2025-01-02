@@ -31,14 +31,22 @@ function SlicedExponential(δ::AbstractMatrix, d::Integer, b::Integer=10000)
 
     cΔ = prod(ub - lb) / b * sum(exp.(zΔ * result.minimizer / -2))
 
-    sn = SlicedExponential(d, t, result.minimizer, lb, ub, cΔ)
-    return sn, -result.minimum
+    se = SlicedExponential(d, t, result.minimizer, lb, ub, cΔ)
+    return se, -result.minimum
 end
 
-function pdf(sn::SlicedExponential, δ::AbstractVector)
-    if all(sn.lb .<= δ .<= sn.ub)
-        return exp(-dot(sn.t(δ), sn.λ) / 2) / sn.c
+function _logpdf(se::SlicedExponential, δ::AbstractArray)
+    if all(se.lb .<= δ .<= se.ub)
+        return log(exp(-dot(se.t(δ), se.λ) / 2) / se.c)
     else
-        return 0
+        return log(0)
     end
+end
+
+function Base.length(se::SlicedExponential)
+    return length(se.t[1].x)
+end
+
+function Base.eltype(se::SlicedExponential)
+    return eltype(se.λ)
 end

@@ -7,34 +7,29 @@ using Monomials
 using TransitionalMCMC
 using QuasiMonteCarlo
 using Optim
+using Random
 
-import Base: rand
+import Base: eltype, length
+import Distributions: _logpdf
 
-export SlicedNormal, SlicedExponential, rand, pdf
+export SlicedNormal, SlicedExponential
 
-abstract type SlicedDistribution end
+export pdf
 
-function Distributions.pdf(sn::SlicedDistribution, δ::AbstractMatrix)
-    n, m = size(δ)
-    if n == 1 || m == 1
-        return pdf(sn, vec(δ))
-    end
-    if n < m
-        return [pdf(sn, c) for c in eachcol(δ)]
-    end
-    return return [pdf(sn, c) for c in eachrow(δ)]
-end
+abstract type SlicedDistribution <: ContinuousMultivariateDistribution end
 
-function rand(sd::SlicedDistribution, n::Integer)
+function Distributions.rand!(rng::AbstractRNG, sd::SlicedDistribution, x::AbstractMatrix)
     prior = Uniform.(sd.lb, sd.ub)
 
     logprior(x) = sum(logpdf.(prior, x))
-    sampler(n) = mapreduce(u -> rand(u, n), hcat, prior)
-    loglikelihood(x) = log(SlicedDistributions.pdf(sd, x))
+    sampler(n) = mapreduce(u -> rand(rng, u, n), hcat, prior)
+    loglikelihood(x) = Distributions.logpdf(sd, x)
 
-    samples, _ = tmcmc(loglikelihood, logprior, sampler, n)
+    samples, _ = tmcmc(loglikelihood, logprior, sampler, size(x, 2))
 
-    return samples
+    x[:] = permutedims(samples)
+
+    return x
 end
 
 function get_likelihood(

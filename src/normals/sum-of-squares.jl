@@ -44,15 +44,6 @@ function SlicedNormal(δ::AbstractMatrix, d::Integer, b::Integer=10000)
     return sn, -result.minimum
 end
 
-function pdf(sn::SlicedNormal, δ::AbstractVector)
-    if all(sn.lb .<= δ .<= sn.ub)
-        z = Zsos(sn.t(δ), sn)
-        return exp(-dot(z, sn.λ) / 2) / sn.c
-    else
-        return 0
-    end
-end
-
 function Zsos(z::AbstractVector, μ::AbstractVector, M::AbstractMatrix)
     return (M * (z - μ)) .^ 2
 end
@@ -68,4 +59,21 @@ function mean_and_covariance(z::AbstractMatrix)
     P = inv(cov(LinearShrinkage(ConstantCorrelation()), z))
 
     return μ, P
+end
+
+function _logpdf(sn::SlicedNormal, δ::AbstractArray)
+    if all(sn.lb .<= δ .<= sn.ub)
+        z = Zsos(sn.t(δ), sn)
+        return log(exp(-dot(z, sn.λ) / 2) / sn.c)
+    else
+        return log(0)
+    end
+end
+
+function Base.length(sn::SlicedNormal)
+    return length(sn.t[1].x)
+end
+
+function Base.eltype(sn::SlicedNormal)
+    return eltype(sn.λ)
 end

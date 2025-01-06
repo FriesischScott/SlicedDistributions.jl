@@ -10,11 +10,11 @@ using Optim
 using Random
 
 import Base: eltype, length
-import Distributions: _logpdf
+import Distributions: _logpdf, insupport
 
 export SlicedNormal, SlicedExponential
 
-export pdf
+export pdf, insupport
 
 abstract type SlicedDistribution <: ContinuousMultivariateDistribution end
 
@@ -30,6 +30,10 @@ function Distributions.rand!(rng::AbstractRNG, sd::SlicedDistribution, x::Abstra
     x[:] = permutedims(samples)
 
     return x
+end
+
+function Distributions.insupport(sd::SlicedDistribution, x::AbstractVector)
+    return all(sd.lb .<= x .<= sd.ub)
 end
 
 function get_likelihood(
@@ -81,5 +85,7 @@ end
 
 include("exponentials/poly.jl")
 include("normals/sum-of-squares.jl")
+
+Base.broadcastable(sd::SlicedDistribution) = Ref(sd)
 
 end

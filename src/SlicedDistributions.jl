@@ -9,7 +9,7 @@ using QuasiMonteCarlo
 using Optim
 using Random
 
-import Base: eltype, length
+import Base: eltype, length, show
 import Distributions: _logpdf, insupport
 
 export SlicedNormal, SlicedExponential
@@ -87,5 +87,12 @@ include("exponentials/poly.jl")
 include("normals/sum-of-squares.jl")
 
 Base.broadcastable(sd::SlicedDistribution) = Ref(sd)
+
+function Base.show(io::IO, sd::SlicedDistribution)
+    print(io, "$(typeof(sd))(nδ=$(length(sd)), d=$(sd.d), nz=$(length(sd.t)),\n")
+    print(io, "  lb=$(sd.lb),\n")
+    print(io, "  ub=$(sd.ub))")
+    return nothing
+end
 
 end

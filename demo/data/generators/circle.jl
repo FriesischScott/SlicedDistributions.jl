@@ -30,4 +30,4 @@ idx = δ1 .< 0
 
 δ = vcat(δ, [δ1 δ2] .* -1)
 
-writedlm("demo/data/circle.csv", δ, ',')
+writedlm("demo/data/circle.csv", permutedims(δ), ',')

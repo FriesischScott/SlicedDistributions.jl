@@ -14,7 +14,7 @@ b = 10000
 @testset "SlicedNormal" begin
     sn, _ = SlicedNormal(circle, d, b)
 
-    @test all(insupport.(sn, eachrow(circle)))
+    @test all(insupport.(sn, eachcol(circle)))
 
     @test hcubature(x -> pdf(sn, x), sn.lb, sn.ub)[1] ≈ 1.0 atol = 1e-3
 
@@ -29,7 +29,7 @@ end
 @testset "SlicedExponential" begin
     se, _ = SlicedExponential(circle, d, b)
 
-    @test all(insupport.(se, eachrow(circle)))
+    @test all(insupport.(se, eachcol(circle)))
 
     @test hcubature(x -> pdf(se, x), se.lb, se.ub)[1] ≈ 1.0 atol = 1e-3
 

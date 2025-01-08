@@ -10,25 +10,25 @@ struct SlicedNormal <: SlicedDistribution
 end
 
 function SlicedNormal(δ::AbstractMatrix, d::Integer, b::Integer=10000)
-    lb = vec(minimum(δ; dims=1))
-    ub = vec(maximum(δ; dims=1))
+    lb = vec(minimum(δ; dims=2))
+    ub = vec(maximum(δ; dims=2))
 
     s = QuasiMonteCarlo.sample(b, lb, ub, HaltonSample())
 
-    t = monomials(["δ$i" for i in 1:size(δ, 2)], 2d, GradedLexicographicOrder())
+    t = monomials(["δ$i" for i in 1:size(δ, 1)], 2d, GradedLexicographicOrder())
 
-    zδ = transpose(t(transpose(δ)))
-    zΔ = transpose(t(s))
+    zδ = t(δ)
+    zΔ = t(s)
 
     μ, P = mean_and_covariance(zδ)
 
     M = cholesky(P).U
 
-    zsosδ = permutedims(Zsos(zδ', μ, M))
-    zsosΔ = permutedims(Zsos(zΔ', μ, M))
+    zsosδ = permutedims(Zsos(zδ, μ, M))
+    zsosΔ = permutedims(Zsos(zΔ, μ, M))
 
-    n = size(δ, 1)
-    nz = size(zδ, 2)
+    n = size(δ, 2)
+    nz = size(zδ, 1)
 
     f = get_likelihood(zsosδ, zsosΔ, n, prod(ub - lb), b)
 
@@ -55,8 +55,8 @@ end
 Zsos(z::AbstractVector, sn::SlicedNormal) = Zsos(z, sn.μ, sn.M)
 
 function mean_and_covariance(z::AbstractMatrix)
-    μ = vec(mean(z; dims=1))
-    P = inv(cov(LinearShrinkage(ConstantCorrelation()), z))
+    μ = vec(mean(z; dims=2))
+    P = inv(cov(LinearShrinkage(ConstantCorrelation()), z; dims=2))
 
     return μ, P
 end

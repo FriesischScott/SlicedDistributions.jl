@@ -9,10 +9,13 @@ struct SlicedNormal <: SlicedDistribution
     c::Float64
 end
 
-function SlicedNormal(δ::AbstractMatrix, d::Integer, b::Integer=10000)
-    lb = vec(minimum(δ; dims=2))
-    ub = vec(maximum(δ; dims=2))
-
+function SlicedNormal(
+    δ::AbstractMatrix,
+    d::Integer,
+    b::Integer=10000,
+    lb::AbstractVector{<:Real}=vec(minimum(δ; dims=2)),
+    ub::AbstractVector{<:Real}=vec(maximum(δ; dims=2)),
+)
     s = QuasiMonteCarlo.sample(b, lb, ub, HaltonSample())
 
     t = monomials(["δ$i" for i in 1:size(δ, 1)], 2d, GradedLexicographicOrder())

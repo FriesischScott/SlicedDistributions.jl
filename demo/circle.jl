@@ -8,7 +8,7 @@ using SlicedDistributions
 d = 3
 b = 10000
 
-@time sn, lh = SlicedNormal(δ, d, b)
+@time sn, lh = SlicedNormal(δ, d, b, [-4, -4], [4, 4])
 
 println("Likelihood: $lh")
 
@@ -22,7 +22,7 @@ scatter!(p, samples[1, :], samples[2, :]; label="samples")
 display(p)
 
 # Plot density
-xs = range(-4, 4; length=200)
-ys = range(-4, 4; length=200)
+xs = range(sn.lb[1], sn.ub[1]; length=1000)
+ys = range(sn.lb[2], sn.ub[2]; length=1000)
 
 contour!(xs, ys, (x, y) -> pdf(sn, [x, y]))

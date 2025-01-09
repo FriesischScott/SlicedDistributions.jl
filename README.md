@@ -19,7 +19,7 @@ Note, that the sliced-Normals are estimated by choosing a square polynomial basi
 
 Consider a data sequence obtained from the time-response of the Van-der-Pol oscillator.
 
-![Van Der Pol Data](doc/img/van-der-pol-data.svg)
+![Van Der Pol Data](docs/img/van-der-pol-data.svg)
 
 To begin fitting a sliced distribution to the data we start by loading the necessary packages and read the input data.
 
@@ -45,7 +45,7 @@ sn, lh = SlicedNormal(δ, d, b, lb, ub)
 
 If the support is omitted, the minimum and maximum values of the data will be inferred as the support automatically. To estimate a sliced-exponential distribution simply replace `SlicedNormal` with `SlicedExponential`. The next plot presents the probability density function (PDF) of the estimated distribution.
 
-![Sliced-Normal Density](doc/img/van-der-pol-density.svg)
+![Sliced-Normal Density](docs/img/van-der-pol-density.svg)
 
 With the distribution in place we can obtain 2000 random samples through `rand`.
 
@@ -55,7 +55,7 @@ samples = rand(sn, 2000)
 
 Internally this will use TMCMC to sample from the PDF. See the next Figure for a scatter plot of the samples.
 
-![Sliced-Normal Samples](doc/img/van-der-pol-samples.svg)
+![Sliced-Normal Samples](docs/img/van-der-pol-samples.svg)
 
 ## References
 

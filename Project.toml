@@ -1,7 +1,7 @@
 name = "SlicedDistributions"
 uuid = "78bc189a-7b6d-4df1-8a23-377b7c6fd0cb"
 authors = ["Jasper Behrensdorf <behrensdorf@irz.uni-hannover.de>"]
-version = "0.1.0"
+version = "1.0.0"
 
 [deps]
 CovarianceEstimation = "587fd27a-f159-11e8-2dae-1979310e6154"

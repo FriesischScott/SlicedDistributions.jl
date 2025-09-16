@@ -1,13 +1,17 @@
 module SlicedDistributions
 
+using ADTypes
 using CovarianceEstimation
 using Distributions
 using LinearAlgebra
+using LogExpFunctions
 using Monomials
 using TransitionalMCMC
 using QuasiMonteCarlo
 using Optim
 using Random
+using Zygote
+using Enzyme
 
 import Base: eltype, length, show
 import Distributions: _logpdf, insupport

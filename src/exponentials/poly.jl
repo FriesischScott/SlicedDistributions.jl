@@ -7,6 +7,9 @@ struct SlicedExponential <: SlicedDistribution
     c::Float64
 end
 
+using Convex
+using SCS
+
 function SlicedExponential(
     δ::AbstractMatrix,
     d::Integer,
@@ -16,7 +19,7 @@ function SlicedExponential(
 )
     s = QuasiMonteCarlo.sample(b, lb, ub, HaltonSample())
 
-    t = monomials(["δ$i" for i in 1:size(δ, 1)], 2d, GradedLexicographicOrder())
+    t = monomials(["δ$i" for i in 1:size(δ, 1)], d, GradedLexicographicOrder())
 
     zδ = permutedims(t(δ))
     zΔ = permutedims(t(s))
@@ -24,17 +27,21 @@ function SlicedExponential(
     n = size(δ, 2)
     nz = size(zδ, 2)
 
-    f = get_likelihood(zδ, zΔ, n, prod(ub - lb), b)
+    function f(λ)
+        return n * logsumexp(zΔ * -λ) + sum(zδ * λ)
+    end
 
-    ∇f! = get_gradient(zδ, zΔ, n)
+    x = Variable(nz)
 
-    ∇²f! = get_hessian(zΔ, n)
+    problem = minimize(n * logsumexp(zΔ * -x) + sum(zδ * x))
 
-    result = optimize(f, ∇f!, ∇²f!, ones(nz), Newton())
+    result = optimize(f, zeros(nz), Newton(); autodiff=AutoEnzyme())
 
-    cΔ = prod(ub - lb) / b * sum(exp.(zΔ * result.minimizer / -2))
+    λ = result.minimizer
 
-    se = SlicedExponential(d, t, result.minimizer, lb, ub, cΔ)
+    cΔ = exp(log(prod(ub - lb)) - log(b) + logsumexp(zΔ * -λ))
+
+    se = SlicedExponential(d, t, λ, lb, ub, cΔ)
     return se, -result.minimum
 end
 

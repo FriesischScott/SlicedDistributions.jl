@@ -18,7 +18,7 @@ function SlicedNormal(
 )
     s = QuasiMonteCarlo.sample(b, lb, ub, HaltonSample())
 
-    t = monomials(["δ$i" for i in 1:size(δ, 1)], 2d, GradedLexicographicOrder())
+    t = monomials(["δ$i" for i in 1:size(δ, 1)], d, GradedLexicographicOrder())
 
     zδ = t(δ)
     zΔ = t(s)
@@ -59,7 +59,7 @@ Zsos(z::AbstractVector, sn::SlicedNormal) = Zsos(z, sn.μ, sn.M)
 
 function mean_and_covariance(z::AbstractMatrix)
     μ = vec(mean(z; dims=2))
-    P = inv(cov(LinearShrinkage(ConstantCorrelation()), z; dims=2))
+    P = Hermitian(inv(cov(z; dims=2)))
 
     return μ, P
 end

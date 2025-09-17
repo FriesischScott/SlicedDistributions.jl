@@ -1,6 +1,4 @@
 module SlicedDistributions
-
-using CovarianceEstimation
 using Distributions
 using LinearAlgebra
 using Monomials

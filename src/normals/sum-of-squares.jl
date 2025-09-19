@@ -59,7 +59,7 @@ Zsos(z::AbstractVector, sn::SlicedNormal) = Zsos(z, sn.μ, sn.M)
 
 function mean_and_covariance(z::AbstractMatrix)
     μ = vec(mean(z; dims=2))
-    P = inv(cov(LinearShrinkage(ConstantCorrelation()), z; dims=2))
+    P = Hermitian(inv(cov(z; dims=2)))
 
     return μ, P
 end

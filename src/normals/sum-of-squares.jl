@@ -18,7 +18,7 @@ function SlicedNormal(
 )
     s = QuasiMonteCarlo.sample(b, lb, ub, HaltonSample())
 
-    t = monomials(["δ$i" for i in 1:size(δ, 1)], d, GradedLexicographicOrder())
+    t = monomials(["δ$i" for i in 1:size(δ, 1)], 2d, GradedLexicographicOrder())
 
     zδ = t(δ)
     zΔ = t(s)

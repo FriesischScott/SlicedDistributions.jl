@@ -2,14 +2,14 @@ using DelimitedFiles
 using Plots
 using SlicedDistributions
 
-δ = readdlm("demo/data/banana_data.csv", ',')
+δ = readdlm("demo/data/banana.csv", ',')
 
 # define custom support
 
 lb = [-3.5, 0]
 ub = [3.5, 60]
 
-d = 4
+d = 2
 b = 10000
 
 sn, lh = SlicedNormal(δ, d, b, lb, ub)
